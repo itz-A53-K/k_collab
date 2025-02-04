@@ -113,4 +113,3 @@ K-Collab is a collaborative platform that includes features such as user managem
 
 ## License
 
-This project is licensed under the MIT License.
