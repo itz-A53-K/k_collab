@@ -13,14 +13,14 @@ K-Collab is a collaborative platform that includes features such as user managem
 
 1. Clone the repository:
     ```sh
-    git clone https://github.com/yourusername/k-collab.git
-    cd k-collab
+    git clone https://github.com/yourusername/k_collab.git
+    cd k_collab
     ```
 
 2. Create a virtual environment and activate it:
     ```sh
     python -m venv venv
-    venv/Scripts/activate ( On Windows )
+    venv/Scripts/activate #( On Windows )
     ```
 
 3. Install the dependencies:
@@ -71,37 +71,37 @@ K-Collab is a collaborative platform that includes features such as user managem
 
 ### User
 
-- : EmailField (unique)
-- : CharField
-- : CharField (optional)
-- : ImageField (optional)
-- : CharField (optional)
+- email : EmailField (unique)
+- name : CharField
+- phone : CharField (optional)
+- dp : ImageField (optional)
+- designation : CharField (optional)
 
 ### Team
 
-- : CharField
-- : CharField (optional)
-- : ImageField (optional)
-- : ManyToManyField (User)
-- : OneToOneField (Chat)
+- name : CharField
+- description : CharField (optional)
+- icon : ImageField (optional)
+- members : ManyToManyField (User)
+- chat : OneToOneField (Chat)
 
 ### Task
 
-- : CharField
-- : TextField
-- : ForeignKey (User, optional)
-- : ForeignKey (Team, optional)
-- : CharField (choices: 'to do', 'in progress', 'completed')
-- : DateField
+- title : CharField
+- description : TextField
+- assigned_user : ForeignKey (User, optional)
+- assigned_team : ForeignKey (Team, optional)
+- status : CharField (choices: 'to do', 'in progress', 'completed')
+- deadline : DateField
 
 ### Chat
 
-- : ManyToManyField (User)
-- : BooleanField
+- members : ManyToManyField (User)
+- is_group_chat : BooleanField
 
 ### Message
 
-- : ForeignKey (User)
-- : ForeignKey (Chat)
-- : TextField
-- : DateTimeField
+- sender : ForeignKey (User)
+- chat : ForeignKey (Chat)
+- content : TextField
+- timestamp : DateTimeField
