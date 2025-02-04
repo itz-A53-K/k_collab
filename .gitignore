@@ -1,0 +1,17 @@
+__pycache__/
+*.__pycache__
+mysql_db.sql
+db.sqlite3
+
+pip-log.txt
+
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+dmypy.json
+*.log
