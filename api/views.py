@@ -14,6 +14,58 @@ from .models import *
 from .serializers import *
 
 
+class messageListCreate(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        chat_id = request.query_params.get('chat_id') or request.data.get('chat_id')
+        if not chat_id:
+            return Response({"error": "chat_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        chat = get_object_or_404(Chat, id=chat_id)
+        messages = chat.messages.all().order_by('timestamp') 
+        serializer = messageSerializer(messages, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def post(self, request, *args, **kwargs):
+        sender = self.request.user
+        # sender = get_object_or_404(User, id = 2)
+        chat_id = request.data.get('chat_id')
+        receiver_id = request.data.get('receiver_id')
+        content = request.data.get('content')
+
+        if not content:
+            return Response({"error": "Content cannot be empty"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if chat_id:
+            chat = get_object_or_404(Chat, id=chat_id)            
+        else:
+            if not receiver_id:
+                return Response({"error": "receiver_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            receiver = User.objects.filter(id=receiver_id).first()
+            if not receiver:
+                return Response({"error": "Invalid receiver_id."}, status=status.HTTP_404_NOT_FOUND)
+            
+            if sender == receiver:
+                return Response({"error": "Sender and receiver cannot be the same"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            members = [sender, receiver] 
+            chat = Chat.objects.filter(members__in=members, is_group_chat = False).first()
+            if not chat:
+                chat = Chat.objects.create(is_group_chat=False)
+                chat.members.set(members)
+                chat.save()
+
+        if sender not in chat.members.all():
+            return Response({"error": "You are not a member of this chat"}, status=status.HTTP_403_FORBIDDEN)
+        
+        message = Message.objects.create(sender=sender, content=content, chat=chat)
+        serializer = messageSerializer(message)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+                
+
+
 class teamListCreate(generics.ListCreateAPIView):
     serializer_class = teamSerializer
     permission_classes = [IsAuthenticated]
@@ -76,4 +128,5 @@ class loginView(APIView):
                 'authToken': token.key,
             }, status=status.HTTP_200_OK)
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
 

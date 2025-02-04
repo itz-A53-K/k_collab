@@ -20,7 +20,7 @@ K-Collab is a collaborative platform that includes features such as user managem
 2. Create a virtual environment and activate it:
     ```sh
     python -m venv venv
-    venv/Scripts/activate #( On Windows )
+    venv/Scripts/activate # On Mac/Linux use `source venv/bin/activate`
     ```
 
 3. Install the dependencies:
@@ -67,41 +67,50 @@ K-Collab is a collaborative platform that includes features such as user managem
     - Requires Authentication
     - Response: List of chats
 
+- **List/Create Messages**: `GET/POST /api/chat/messages/`
+    - Requires Authentication
+    - Request Body (POST): `{ "chat_id": "chat_uuid", "receiver_id": "receiver_uuid", "content": "message content" }`
+    - Response: List of messages or created message details
+
 ## Models
 
 ### User
 
-- email : EmailField (unique)
-- name : CharField
-- phone : CharField (optional)
-- dp : ImageField (optional)
-- designation : CharField (optional)
+- [`email`](api/models.py): EmailField (unique)
+- [`name`](api/models.py): CharField
+- [`phone`](api/models.py): CharField (optional)
+- [`dp`](api/models.py): ImageField (optional)
+- [`designation`](api/models.py): CharField (optional)
 
 ### Team
 
-- name : CharField
-- description : CharField (optional)
-- icon : ImageField (optional)
-- members : ManyToManyField (User)
-- chat : OneToOneField (Chat)
+- [`name`](api/models.py): CharField
+- [`description`](api/models.py): CharField (optional)
+- [`icon`](api/models.py): ImageField (optional)
+- [`members`](api/models.py): ManyToManyField (User)
+- [`chat`](api/models.py): OneToOneField (Chat)
 
 ### Task
 
-- title : CharField
-- description : TextField
-- assigned_user : ForeignKey (User, optional)
-- assigned_team : ForeignKey (Team, optional)
-- status : CharField (choices: 'to do', 'in progress', 'completed')
-- deadline : DateField
+- [`title`](api/models.py): CharField
+- [`description`](api/models.py): TextField
+- [`assigned_user`](api/models.py): ForeignKey (User, optional)
+- [`assigned_team`](api/models.py): ForeignKey (Team, optional)
+- [`status`](api/models.py): CharField (choices: 'to do', 'in progress', 'completed')
+- [`deadline`](api/models.py): DateField
 
 ### Chat
 
-- members : ManyToManyField (User)
-- is_group_chat : BooleanField
+- [`members`](api/models.py): ManyToManyField (User)
+- [`is_group_chat`](api/models.py): BooleanField
 
 ### Message
 
-- sender : ForeignKey (User)
-- chat : ForeignKey (Chat)
-- content : TextField
-- timestamp : DateTimeField
+- [`sender`](api/models.py): ForeignKey (User)
+- [`chat`](api/models.py): ForeignKey (Chat)
+- [`content`](api/models.py): TextField
+- [`timestamp`](api/models.py): DateTimeField
+
+## License
+
+This project is licensed under the MIT License.

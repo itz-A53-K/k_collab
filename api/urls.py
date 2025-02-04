@@ -6,4 +6,5 @@ urlpatterns = [
     path('chats/', views.chatList.as_view(), name='chat_list'),
     path('teams/', views.teamListCreate.as_view(), name='team_list_create'),
     path('teams/<uuid:team_id>/', views.teamContent.as_view(), name='team_content'),
+    path('chat/messages/', views.messageListCreate.as_view(), name='message_list_create'),
 ]
