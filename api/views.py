@@ -24,8 +24,8 @@ class messageListCreate(APIView):
 
         chat = get_object_or_404(Chat, id=chat_id)
         messages = chat.messages.all().order_by('timestamp') 
-        serializer = messageSerializer(messages, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        msgserializer = messageSerializer(messages, many=True)
+        return Response({"chat": chatSerializer(chat).data, "messages": msgserializer.data}, status=status.HTTP_200_OK)
     
     def post(self, request, *args, **kwargs):
         sender = self.request.user
@@ -109,6 +109,25 @@ class chatList(generics.ListAPIView):
 class userList(generics.ListAPIView):
     queryset = User.objects.all()
     serializer_class = userSerializer
+
+
+
+class updateUserIP(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        ip_addr = request.data.get('ip_address')
+        port = request.data.get('port')
+
+        if not ip_addr or not port:
+            return Response({"error": "Both IP and Port is required"}, status= status.HTTP_400_BAD_REQUEST)
+
+        user.ip_addr = ip_addr
+        user.port = port
+        user.save()
+
+        return Response({"message": "IP updated"}, status= status.HTTP_200_OK )
 
 
 

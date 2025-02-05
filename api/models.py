@@ -23,6 +23,9 @@ class User(AbstractUser):
 
     designation = models.CharField(max_length=100, blank=True, null=True)
 
+    ip_addr = models.GenericIPAddressField(blank=True, null= True)
+    port = models.IntegerField(blank= True, null= True)
+
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
     objects = UserManager()

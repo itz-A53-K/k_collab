@@ -122,7 +122,7 @@ MEDIA_URL = '/media/'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        # 'api.tokenAuth.CookieTokenAuthentication',
+        'api.tokenAuth.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
 }

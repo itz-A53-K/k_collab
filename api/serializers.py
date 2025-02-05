@@ -5,14 +5,28 @@ from .models import *
 class userSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'name', 'email', 'phone', 'designation', 'dp']
+        fields = ['id', 'name', 'email', 'phone', 'designation', 'dp', 'ip_addr', 'port']
 
 
 class chatSerializer(serializers.ModelSerializer):
-    members = serializers.StringRelatedField(many=True)
+    members = serializers.SerializerMethodField()
     class Meta:
         model = Chat
         fields = ['id', 'members', 'is_group_chat'] 
+    
+    def get_members(self,obj):
+        users = userSerializer(obj.members, many = True).data
+        filtered_users = [
+            {
+                "name": user["name"],
+                "email": user["email"],
+                "ip_addr": user["ip_addr"],
+                "port": user["port"]
+            }
+            for user in users
+        ]
+
+        return filtered_users
     
 
 class teamSerializer(serializers.ModelSerializer):
