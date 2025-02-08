@@ -42,24 +42,21 @@ class Team(models.Model):
     icon = models.ImageField(upload_to='team_icons/', null=True, blank=True)
     members = models.ManyToManyField(User, related_name='teams')
     created_at = models.DateTimeField(auto_now_add=True)
-    chat = models.OneToOneField('Chat', on_delete=models.CASCADE, related_name='team', null=True, blank=True)
+    chat = models.OneToOneField('Chat', on_delete=models.CASCADE, related_name='team', null=True, blank=True, editable=False)
 
     def __str__(self):
         return self.name
     
     def save(self, *args, **kwargs):
-        creating = self._state.adding
-        super().save(*args, **kwargs)
-
-        if creating:
-            # print("Creating a new chat for the team")
+        if self._state.adding:
             chat = Chat.objects.create(is_group_chat=True)
             self.chat = chat
-            self.save()
+        super().save(*args, **kwargs)
 
 @receiver(m2m_changed, sender=Team.members.through)  # Listen to changes in the M2M table
 def team_members_changed(sender, instance, action, **kwargs):
-    instance.chat.members.set(instance.members.all())
+    if action in ["post_add", "post_remove", "post_clear"]:
+        instance.chat.members.set(instance.members.all())
 
 
     
@@ -71,8 +68,8 @@ class Task(models.Model):
         ('completed', 'Completed'),
     ]
 
-    title = models.CharField(max_length=200)
-    description = models.TextField()
+    title = models.CharField(max_length=100)
+    description = models.CharField(max_length=500)
     assigned_user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='tasks')
     assigned_team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='tasks', null=True, blank=True)
     status = models.CharField(max_length=20, choices= STATUS_CHOICES, default="to do")
@@ -82,6 +79,33 @@ class Task(models.Model):
     def save(self, *args, **kwargs):
         if not self.assigned_user and not self.assigned_team:
             raise ValueError("Either assigned_user or assigned_team must be set")
+        if self.assigned_team and self.assigned_user:
+            raise ValueError("Only one of assigned_user or assigned_team should be set")
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.title
+
+
+class SubTask(models.Model):
+    STATUS_CHOICES = [
+        ('to do', 'To Do'),
+        ('in progress', 'In Progress'),
+        ('completed', 'Completed'),
+    ]
+
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='subtasks')
+    title = models.CharField(max_length=100)
+    description = models.CharField(max_length=300)
+    assigned_user = models.ForeignKey(User, on_delete=models.SET_NULL, null= True, blank= True, related_name='subtasks')
+    status = models.CharField(max_length=20, choices= STATUS_CHOICES, default="to do")
+    deadline = models.DateField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        if not self.task.assigned_team:
+            raise ValueError("SubTask can only be created if the parent Task is assigned to a team.")
+        if not self.deadline:
+            self.deadline = self.task.deadline
         super().save(*args, **kwargs)
 
     def __str__(self):

@@ -5,13 +5,23 @@ from .models import *
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
     list_display = ['id', 'name', 'email', 'phone']
-admin.site.register(Team)
-admin.site.register(Task)
-admin.site.register(Chat)
 
 @admin.register(Message)
-class MessageAdmin(admin.ModelAdmin):
+class messageAdmin(admin.ModelAdmin):
     list_display = ['id', 'sender', 'timestamp']
 
+
+
+class SubTaskInline(admin.TabularInline):
+    model = SubTask
+    extra = 2
+
+class taskAdmin(admin.ModelAdmin):
+    inlines = [SubTaskInline]
+    list_display = ['id', 'title', 'status', 'deadline']
+
+admin.site.register(Task, taskAdmin)
+admin.site.register(Team)
+admin.site.register(Chat)
 
 

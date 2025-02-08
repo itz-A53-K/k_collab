@@ -87,7 +87,7 @@ class teamContent(APIView):
 
         data = {
             'team': teamSerializer(team).data,
-            'tasks': taskSerializer(tasks, many=True).data if tasks else {"msg": "No tasks found"},
+            'tasks': taskSerializer(tasks, many=True).data if tasks else {"msg": "No tasks yet"},
             'last message': messageSerializer(lastMsg).data if lastMsg else {"msg": "No message"},  #latest message 
         }
         return Response(data, status=status.HTTP_200_OK)
