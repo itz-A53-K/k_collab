@@ -131,6 +131,22 @@ class updateUserIP(APIView):
 
 
 
+class logoutView(APIView):
+    permission_classes = [IsAuthenticated]
+    def post(self, request):
+        token = request.user.auth_token
+        if token:
+            try:
+                Token.objects.get(key = token).delete()
+            except Token.DoesNotExist:
+                print("Invalid Token")
+                
+        response = Response({'message': 'Logged out successfully'}, status=status.HTTP_200_OK)
+        response.delete_cookie('authToken')
+        return response
+
+
+
 class loginView(APIView):
     def post(self, request):
         email = request.data.get('email')
@@ -145,6 +161,11 @@ class loginView(APIView):
             return Response({
                 'message': 'Login successful',
                 'authToken': token.key,
+                'user':{
+                    'id': user.id,
+                    'name': user.name,
+                    'email': user.email,
+                }
             }, status=status.HTTP_200_OK)
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 

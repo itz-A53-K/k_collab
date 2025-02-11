@@ -3,7 +3,7 @@ import socket, threading, requests, json
 API_BASE_URL = "http://127.0.0.1:8000/api/"
 # AUTH_TOKEN = "65b67abb4be0dfe127869a7cf2f340a648b131f6" #abi@kcollab.in
 # AUTH_TOKEN = "b160214a21b93e14c9556f203c8408ad68fbdb07" #abinash@kcnnect.in
-AUTH_TOKEN = "30da3252503ea8dd503cd047249cb8661dc2a15f" #abi@ab.in
+AUTH_TOKEN = "d9da67c9c2325aa2db96c6b889f2390ea9dda75c" #abi@ab.in
 
 headers = {
     "Authorization": f"Bearer {AUTH_TOKEN}"

@@ -49,6 +49,7 @@ class messageSerializer(serializers.ModelSerializer):
         fields = ['id', 'sender', 'content', 'timestamp']
     def get_sender(self, obj):
         return {
+            'id': obj.sender.id,
             'name': obj.sender.name,
             'email': obj.sender.email,
         }

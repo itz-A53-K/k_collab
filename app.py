@@ -1,96 +1,122 @@
 import tkinter as tk
 from tkinter import ttk
+import socket, threading, requests, json, re
 
 class App:
     def __init__(self, root):
         print("App running ...")
         self.root = root
         self.root.geometry("1000x600")
-        self.root.title("K_Collab")
+        self.title = "K Collab"
+        self.root.title(self.title)
+
+        self.bgc_primary = "#1D6F4C"
+        self.bgc1 = "#2c3e50"
+        self.bgc2 = "#196C38"
+        self.bgc3 = "#0FAE83"
+
+        self.baseURL = "http://127.0.0.1:8000/api/"
 
         # Main layout
-        self.main_container = tk.Frame(self.root)
+        self.main_container = tk.Frame(self.root, bg="#848786") 
         self.main_container.pack(fill=tk.BOTH, expand=True)
 
-        # Navbar
-        self.navbar = tk.Frame(self.main_container, width=50, bg="#2c3e50")
-        self.navbar.pack(side=tk.LEFT, fill=tk.Y)
-        self.navbar.pack_propagate(False)
 
-        # Hamburger button
-        self.is_navbar_expanded = False
-        hamburger_btn = tk.Button(
-            self.navbar,
-            text="☰", 
-            font=('Arial', 16), 
-            bg="#2c3e50", fg="white",
-            pady=10, 
-            bd=0, 
-            command=self.toggle_navbar
-        )
-        hamburger_btn.pack(pady=5, padx=5, anchor="w")
-
-        # Navbar buttons
-        navLinks = [("Dashboard", "📊"), ("Chats", "💬"), ("Tasks", "📋")]
-        navLink_style = {'font': ('Arial', 14), 'bg': "#2c3e50", 'fg': "white", 'pady': 10, 'bd': 0, 'padx': 10, 'anchor': "w", 'justify': "left"}
-        self.nav_buttons = []
-        self.nav_icons = []
+        self.showLoginPage()
+    
+    def showLoginPage(self):
         
+        self.loginFrame = tk.Frame(self.main_container, bg = "#fff", padx=30, pady=30, bd = 3, relief="flat") 
+        self.loginFrame.place(anchor="c", relx=.5, rely=.5)
+
+        tk.Label(self.loginFrame, text=f"Welcome to {self.title}", font=('Arial', 26, 'bold'), bg=self.loginFrame.cget("bg"), fg="#1D6F4C").pack()
+
+        tk.Label(self.loginFrame, text="Login to your account to continue.", font=('Arial', 13), bg=self.loginFrame.cget("bg"), fg="#111").pack()
+
+        self.login_status = tk.Label(self.loginFrame, text="", fg="#b30c0c", font = ('Halvatika', 13), bg= self.loginFrame.cget("bg"))
+        self.login_status.pack(pady=10)
+
+        inputStyle = {"font": ('Arial', 12), "width": 40, "bg": "#BFE3D7", "bd": 1, "relief": "groove",}
+
+        emailFrame = tk.Frame(self.loginFrame, bg=self.loginFrame.cget("bg"))
+        emailFrame.pack(pady=10)
+        tk.Label(emailFrame, text="Enter Email:", font=('Arial', 13, 'bold'), bg=emailFrame.cget("bg"), fg="#222").grid(row=0, column=0, padx=10)
+
+        self.emailInput = tk.Entry(emailFrame, **inputStyle)
+        self.emailInput.grid(row= 0, column= 1, padx= 10, ipady=5, ipadx=5)
         
-        for text, icon in navLinks:
-            icon_btn = tk.Button(
-                self.navbar, 
-                text=icon, 
-                command=lambda t=text: self.show_content(t), 
-                **navLink_style
-            )
-            icon_btn.pack(pady=5)
-            self.nav_icons.append(icon_btn)
 
-            text_btn = tk.Button(
-                self.navbar, 
-                text=f"{icon} {text}", 
-                command=lambda t=text: self.show_content(t), 
-                **navLink_style
-            )
-            self.nav_buttons.append(text_btn)
+        passwordFrame = tk.Frame(self.loginFrame, bg=self.loginFrame.cget("bg"))
+        passwordFrame.pack(pady=10)
+        tk.Label(passwordFrame, text= "Enter Password:", font= ('Arial', 13, 'bold'), bg= passwordFrame.cget("bg"), fg="#222").grid(row= 0, column= 0, padx= 10)
 
-        # Content area
-        self.content = tk.Frame(self.main_container, bg="white")
-        self.content.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        self.passwordInput = tk.Entry(passwordFrame, show= "*", **inputStyle)
+        self.passwordInput.grid(row= 0, column= 1, padx= 10, ipady=5, ipadx=5) 
 
-        # Initialize sections
-        self.dashboard_frame = self.create_dashboard()
-        self.chats_frame = self.create_chats()
-        self.tasks_frame = self.create_tasks()
+        self.loginBtn = tk.Button(self.loginFrame, text="LOGIN", font=('Arial', 13), bg="#0FAE83", fg="white", pady=7, bd=0, width= 25, command=self.handleLogin)
+        self.loginBtn.pack(pady=20)
+        
 
-        # Show default section
-        self.show_dashboard()
 
-    def toggle_navbar(self):
-        """Expand or collapse navbar."""
-        if self.is_navbar_expanded:
-            self.navbar.configure(width=50)
-            for btn in self.nav_buttons:
-                btn.pack_forget()
-            for icon in self.nav_icons:
-                icon.pack(pady=5)
-        else:
-            self.navbar.configure(width=200)
-            for icon in self.nav_icons:
-                icon.pack_forget()
-            for btn in self.nav_buttons:
-                btn.pack(pady=5, fill=tk.X)
-        self.is_navbar_expanded = not self.is_navbar_expanded
+    def handleLogin(self):
 
-    def create_dashboard(self):
+        def showError(msg):
+            self.login_status.config(text=f"*{msg}")
+            self.loginBtn.config(state="normal")
+        
+
+        self.loginBtn.config(state="disabled")
+        email = self.emailInput.get()
+        password = self.passwordInput.get()
+
+        #input validation 
+        regex = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b'
+        if not re.match(regex, email):
+            showError("Invalid email address")            
+            return
+        
+        elif len(password) < 4:
+            showError("Password must be at least 4 characters")
+            return
+        
+        try:
+            resp = requests.post(self.baseURL + 'login/', data = {"email": email, "password": password})
+            if resp.status_code == 200:
+                print("Login successful")
+                resp = resp.json()
+                self.authToken = resp.get('authToken')
+                self.user_id = resp.get('user')['id']
+                self.user_name = resp.get('user')['name']
+
+                self.loginFrame.pack_forget()
+                self.init_ui()
+                
+            else:
+                showError(resp.json()['error'])
+                return
+
+        except Exception as e:
+            showError("An error occured. Try again")
+            print("Error : ", e)
+            return
+
+        # self.host_ip = "127.0.0.1"
+        # self.host_port = 5000
+        # self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # self.sock.bind((self.host_ip, self.host_port))
+        # self.startThread()
+
+
+
+    def createDashboardUI(self):
         """Create Dashboard UI."""
         frame = tk.Frame(self.content, bg="white")
         tk.Label(frame, text="Dashboard", font=('Arial', 24), bg="white").pack(pady=20)
         return frame
 
-    def create_chats(self):
-        """Create Chats UI."""
+
+
+    def createChatsUI(self):
         frame = tk.Frame(self.content, bg="white")
 
         # Chat list panel
@@ -107,9 +133,12 @@ class App:
         chat_canvas.configure(yscrollcommand=chat_scrollbar.set)
 
         # Add chats
-        for i in range(20):
-            chat_id = i + 1
-            chat = tk.Frame(chat_frame, bg="white", pady=10, padx=5)
+
+        chats = requests.get(self.baseURL + 'chats/', headers= {"Authorization": f"Bearer {self.authToken}"}).json()
+        
+        for i in chats:
+            chat_id = i['id']
+            chat = tk.Frame(chat_frame, bg="white", pady=10, padx=5, cursor="hand2")
             chat.pack(fill=tk.X, pady=4)
 
             tk.Label(chat, text=f"Chat {chat_id}", bg="white").pack(anchor="w")
@@ -193,7 +222,9 @@ class App:
 
         return frame
     
-    def create_tasks(self):
+
+
+    def createTasksUI(self):
         """Create Tasks UI."""
         frame = tk.Frame(self.content, bg="white")
         tk.Label(frame, text="Tasks Section", font=('Arial', 24), bg="white").pack(pady=20)
@@ -201,124 +232,115 @@ class App:
 
 
 
+
+    def toggle_navbar(self):
+        """Expand or collapse navbar."""
+        if self.is_navbar_expanded:
+            self.navbar.configure(width=50)
+            for btn in self.nav_buttons:
+                btn.pack_forget()
+            for icon in self.nav_icons:
+                icon.pack(pady=5)
+        else:
+            self.navbar.configure(width=200)
+            for icon in self.nav_icons:
+                icon.pack_forget()
+            for btn in self.nav_buttons:
+                btn.pack(pady=5, fill=tk.X)
+        self.is_navbar_expanded = not self.is_navbar_expanded
+
+
+
+    def init_ui(self):
+
+        # Navbar
+        self.navbar = tk.Frame(self.main_container, width=50, bg=self.bgc_primary)
+        self.navbar.pack(side=tk.LEFT, fill=tk.Y)
+        self.navbar.pack_propagate(False)
+
+        # Hamburger button
+        self.is_navbar_expanded = False
+        hamburger_btn = tk.Button(
+            self.navbar,
+            text="☰", 
+            font=('Arial', 16), 
+            bg=self.navbar.cget("bg"),
+            fg="white",
+            pady=10, 
+            bd=0, 
+            command=self.toggle_navbar
+        )
+        hamburger_btn.pack(pady=5, padx=5, anchor="w")
+
+        # Navbar buttons
+        navLinks = [("Dashboard", "📊"), ("Chats", "💬"), ("Tasks", "📋")]
+        navLink_style = {
+            'font': ('Arial', 14), 
+            'bg': self.navbar.cget("bg"), 
+            'fg': "white", 
+            'pady': 10, 
+            'bd': 0, 
+            'padx': 10, 
+            'anchor': "w", 
+            'justify': "left"
+        }
+        self.nav_buttons = []
+        self.nav_icons = []        
+        
+        for text, icon in navLinks:
+            icon_btn = tk.Button(
+                self.navbar, 
+                text=icon, 
+                command=lambda t=text: self.show_content(t), 
+                **navLink_style
+            )
+            icon_btn.pack(pady=5)
+            self.nav_icons.append(icon_btn)
+
+            text_btn = tk.Button(
+                self.navbar, 
+                text=f"{icon} {text}", 
+                command=lambda t=text: self.show_content(t), 
+                **navLink_style
+            )
+            self.nav_buttons.append(text_btn)
+
+        # Content area
+        self.content = tk.Frame(self.main_container, bg="white")
+        self.content.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        # Initialize sections
+        self.dashboard_frame = self.createDashboardUI()
+        self.chats_frame = self.createChatsUI()
+        self.tasks_frame = self.createTasksUI()
+
+        # Show default section
+        self.show_dashboard()
+
+
+
+
+
+
     def show_messages(self, chat_id):
-        print(f"Showing chat {chat_id}")
 
         # Clear previous messages
         for widget in self.message_frame.winfo_children():
             widget.destroy()
 
-        # Sample messages
-        chat_messages = {
-            1: [
-                ("👋 Welcome to the Project Discussion!", "left"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Thanks! Excited to be here", "right"),
-                ("Let's discuss the new features", "left"),
-                ("I've prepared some mockups", "right")
-            ],
-            2: [
-                ("🎨 Design Team Updates", "left"),
-                ("The new color scheme looks great!", "right"),
-                ("Should we adjust the typography?", "left"),
-                ("Yes, I think that would help", "right")
-            ],
-            3: [
-                ("🚀 Sprint Planning", "left"),
-                ("What's our velocity target?", "right"),
-                ("Aiming for 20 story points", "left"),
-                ("Sounds achievable", "right")
-            ],
-            4: [
-                ("📊 Analytics Review", "left"),
-                ("User engagement is up 25%", "right"),
-                ("That's fantastic news! 🎉", "left"),
-                ("What drove the increase?", "right")
-            ],
-            5: [
-                ("🐛 Bug Reports", "left"),
-                ("Found an issue in production", "right"),
-                ("Can you share more details?", "left"),
-                ("Sending screenshots now...", "right")
-            ],
-            6: [
-                ("📱 Mobile App Discussion", "left"),
-                ("iOS version is ready for testing", "right"),
-                ("Great! When can we start?", "left"),
-                ("I'll set up TestFlight today", "right")
-            ],
-            7: [
-                ("🔒 Security Updates", "left"),
-                ("New authentication flow", "right"),
-                ("Is 2FA implemented?", "left"),
-                ("Yes, testing complete", "right")
-            ],
-            8: [
-                ("💡 Innovation Ideas", "left"),
-                ("What about AI integration?", "right"),
-                ("Interesting possibility!", "left"),
-                ("I'll draft a proposal", "right")
-            ],
-            9: [
-                ("📈 Performance Review", "left"),
-                ("Load times improved by 40%", "right"),
-                ("Excellent optimization!", "left"),
-                ("More improvements coming", "right")
-            ],
-            10: [
-                ("🤝 Team Collaboration", "left"),
-                ("New team member joining", "right"),
-                ("When do they start?", "left"),
-                ("Next Monday! 📅", "right")
-            ]
-        }
-        messages = chat_messages.get(chat_id, [
-            ("No messages yet", "left"),
-            ("Start a conversation!", "right")
-        ])
+        peers, messages = self.getChatDetails(chat_id)
 
-        for msg, align in messages:
-            msg_frame = tk.Frame(self.message_frame, bg="white")
-            msg_frame.pack(pady=5, padx=10, anchor="w" if align == "left" else "e")
+        for sender, content, align, timestamp in messages:
+            self.display_message({"sender": sender, "message": content}, align)
+        
 
-            bubble_frame = tk.Frame(
-                msg_frame,
-                bg="#e6e6e6" if align == "left" else "#dcf8c6",
-                bd=1,
-                relief="solid"
-            )
-            bubble_frame.pack(side="left" if align == "left" else "right")
+        def send():
+            msg = ""
 
-            tk.Label(
-                bubble_frame,
-                text=msg,
-                wraplength=280,
-                bg=bubble_frame.cget("bg"),
-                pady=8,
-                padx=12
-            ).pack()
-
+            if msg:
+                self.send_message(peers, msg)
+                # self.message_input.delete(0, tk.END)
+            
    
 
     def show_content(self, section):
@@ -351,6 +373,62 @@ class App:
             widget.pack_forget()
 
 
+    def getChatDetails(self, chat_id):
+        resp = requests.get(self.baseURL + 'chat/messages/', headers= {"Authorization": f"Bearer {self.authToken}"}, data = {"chat_id": chat_id})
+
+        if resp.status_code == 200:
+            members =resp.json()['chat']['members']
+
+            messages = resp.json()['messages']
+
+            peers = [(m["ip_addr"], m["port"], m["name"]) for m in members]
+            
+            msgFormated = []
+            for msg in messages:
+                sender_id = msg["sender"]["id"]
+                sender = msg["sender"]["name"] if sender_id != self.user_id else "You"
+                align = "right" if sender_id == self.user_id else "left"
+
+                msgFormated.append((sender, msg['content'], align, msg['timestamp']))
+            
+            return [peers, msgFormated]
+
+
+
+
+
+    def startThread(self):
+        threading.Thread(target=self.receive_messages, daemon=True).start()
+
+    def receive_messages(self):
+        while True:
+            try:
+                message, _ = self.sock.recvfrom(1024)
+                self.display_message(json.loads(message.decode()), "left")
+            except:
+                break
+
+    def send_message(self, peers, message):
+        for peer in peers:
+            self.sock.sendto(json.dumps({"sender": "You", "message": message}).encode(), (peer[0], peer[1]))
+        self.display_message({"sender": "You", "message": message}, "right")
+    
+
+    def display_message(self, msg, align):
+        msg_frame = tk.Frame(self.message_frame, bg="white")
+        msg_frame.pack(pady=5, padx=10, anchor="e" if align == "right" else "w")
+
+        bubble_frame = tk.Frame(
+            msg_frame,
+            bg="#dcf8c6" if align == "right" else "#e6e6e6",
+            bd=1,
+            relief="solid"
+        )
+        bubble_frame.pack(side="right" if align == "right" else "left")
+
+        tk.Label(bubble_frame, text=msg["sender"], bg=bubble_frame.cget("bg"), fg="blue", font=('Arial', 8), padx=5).pack(anchor="w")
+        tk.Label(bubble_frame, text=msg["message"], wraplength=280, bg=bubble_frame.cget("bg"), font=('Arial', 11), padx=5, justify="left").pack()
+    
 if __name__ == "__main__":
     root = tk.Tk()
     app = App(root)
