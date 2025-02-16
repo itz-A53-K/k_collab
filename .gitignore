@@ -15,3 +15,7 @@ venv.bak/
 
 dmypy.json
 *.log
+
+
+kcollab_auth_token.json
+s.css

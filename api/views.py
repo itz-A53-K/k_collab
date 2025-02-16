@@ -117,8 +117,9 @@ class updateUserIP(APIView):
 
     def post(self, request):
         user = request.user
-        ip_addr = request.data.get('ip_address')
-        port = request.data.get('port')
+        # ip_addr = request.META['REMOTE_ADDR']
+        ip_addr = '127.0.0.2'
+        port = request.data.get('port', 8000)
 
         if not ip_addr or not port:
             return Response({"error": "Both IP and Port is required"}, status= status.HTTP_400_BAD_REQUEST)
@@ -127,7 +128,7 @@ class updateUserIP(APIView):
         user.port = port
         user.save()
 
-        return Response({"message": "IP updated"}, status= status.HTTP_200_OK )
+        return Response({"message": "IP updated", "uID": user.id, "uName": user.name, 'ip': ip_addr, "port": port}, status= status.HTTP_200_OK )
 
 
 
