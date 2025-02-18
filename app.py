@@ -8,6 +8,7 @@ class KCollabApp:
         print("App running ...")
         self.root = root
         self.root.geometry("1000x600")
+        self.root.minsize(700, 400)
         self.root.title("K Collab")
         self.TOKEN_FILE = "kcollab_auth_token.json"
         self.tokenExpireTime = 5 * 86400 # 5 days in seconds ( 1 day = 86400 secs)
@@ -15,18 +16,21 @@ class KCollabApp:
         self.bgs = {
             "bg1": "#196C38",
             "bg1_mid": "#93e7b2",
+            "bg1_mid2": "#7bcf9a",
             "bg1_light": "#a3efbf",
             "bg2": "#8ddfab",
             "bg3": "#1D6F4C",
             "bg4": "#0FAE83",
             "bg5": "#2D3E50",
-            "bg6": "#848786"
+            "bg6": "#848786",
         }
 
         
 
         # self.isMsgUI_init = False
         self.baseURL = "http://127.0.0.1:8000/api/"
+
+        self.openedChatID = None
 
         self.mainFrame = tk.Frame(self.root, bg= self.bgs["bg6"])
         self.mainFrame.pack(fill=tk.BOTH, expand=True)
@@ -184,11 +188,11 @@ class KCollabApp:
         # chats panel 
         panelBG = self.bgs["bg1_light"]
 
-        chatPanelFrame = tk.Frame(frame, width=300, bg=panelBG, pady=5, padx=5)
+        chatPanelFrame = tk.Frame(frame, width=350, bg=panelBG, pady=5, padx=5)
         chatPanelFrame.pack(side=tk.LEFT, fill=tk.Y)
         chatPanelFrame.pack_propagate(False)
 
-        chatsFrameHeader = tk.Label(chatPanelFrame, text="Chats", bg= panelBG, font=('Arial', 16, 'bold')).pack(side=tk.TOP, anchor='w')
+        chatsFrameHeader = tk.Label(chatPanelFrame, text="Chats", bg= panelBG, font=('Arial', 16, 'bold')).pack(side=tk.TOP, anchor='w', padx=10)
 
         filterFrame = tk.Frame(chatPanelFrame, bg=panelBG, pady=5, padx=5)
         filterFrame.pack(side=tk.TOP, anchor='w' , fill=tk.X, pady=10)
@@ -230,7 +234,7 @@ class KCollabApp:
         scrollbar = ttk.Scrollbar(chatPanelFrame, orient="vertical", style="Vertical.TScrollbar", command=canvas.yview)
 
 
-        chatFrame = tk.Frame(canvas, bg= panelBG)
+        chatFrame = tk.Frame(canvas, bg= panelBG, padx=5)
         chatFrame.bind(
             '<Configure>',
             lambda e: canvas.config(
@@ -243,18 +247,14 @@ class KCollabApp:
             (-2, -2), 
             window=chatFrame, 
             anchor="nw", 
-            width=290
+            width=340
         )
 
         canvas.configure(yscrollcommand=scrollbar.set)
 
         canvas.bind(
             '<Enter>',
-            lambda e: scrollbar.pack(
-                side=tk.RIGHT, 
-                fill=tk.Y, 
-                expand=False
-            )
+            lambda e: scrollbar.pack(side=tk.RIGHT, fill=tk.Y, expand=False)
         )
         canvas.bind(
             '<Leave>',
@@ -273,35 +273,33 @@ class KCollabApp:
             for i in chats.json():
                 chat_id = i['id']
                 meta = i.get('metaData')
-                chat = tk.Frame(chatFrame, bg= panelBG, cursor="hand2")
-                chat.pack(ipady=10,ipadx=10, fill="x")
+                chat = tk.Frame(chatFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
+                # chat.pack(ipady=10,ipadx=10, fill="x")
+                chat.pack(fill="x")
+
+                chat.chat_id = chat_id
                 
                 tk.Label(chat, text=meta['name'], bg=panelBG, font=('Arial', 11)).pack(anchor="w")
+                tk.Label(chat, text=meta['name'], bg=panelBG, font=('Arial', 8)).pack(anchor="w")
 
-                chat.bind(
-                    '<MouseWheel>',
-                    lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units")
-                )
-                chat.bind(
-                    '<Button-1>',
-                    lambda e, id = chat_id: self.handleChatClick(id)
-                )
-                chat.bind(
-                    '<Enter>',
-                    lambda e, item= chat: item.config(bg= self.bgs["bg1_mid"])
-                )
-                chat.bind(
-                    '<Leave>',
-                    lambda e, item = chat: item.config(bg= panelBG)
-                )
+                chatBindings ={
+                    '<MouseWheel>': lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"),
+                    '<Button-1>': lambda e, id=chat_id, mData=meta, chat_widget = chat: self.handleChatClick(id, mData, chat_widget),
+                    '<Enter>': lambda e, item=chat: self.chat_MouseEnter(item),
+                    '<Leave>': lambda e, item=chat: self.chat_MouseLeave(item),
+                }
 
+                for event, func in chatBindings.items():
+                    chat.bind(event, func)
+
+                    
         #messages panel
-        msgPanelFrame = tk.Frame(frame, pady=5, padx=5)
-        msgPanelFrame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.msgPanelFrame = tk.Frame(frame, pady=5, padx=5)
+        self.msgPanelFrame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         #default contents inside msg panel if no chat selected
-        msgDefaultFrame = tk.Frame(msgPanelFrame, pady=5, padx=5)
-        msgDefaultFrame.pack( padx=10, pady=10)
+        msgDefaultFrame = tk.Frame(self.msgPanelFrame)
+        msgDefaultFrame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
         tk.Label(msgDefaultFrame, text="K Collab", bg=msgDefaultFrame.cget('bg'), font=('Arial', 18, 'bold')).pack()
 
@@ -323,7 +321,7 @@ class KCollabApp:
 
 
 
-#btn events
+#click handle events
     def handleLoginClick(self):
         def showError(msg):
             self.login_status.config(text=f"*{msg}")
@@ -373,7 +371,33 @@ class KCollabApp:
         elif section.lower() == "tasks":
             self.initTasks()
         
+    def handleChatClick(self, chat_id, metaData, chat_widget):
+        if self.openedChatID != chat_id:
 
+            if hasattr(self, "activeChat"): 
+                self.activeChat.config(bg=self.bgs["bg1_light"]) 
+                [w.config(bg=self.bgs["bg1_light"])  for w in self.activeChat.winfo_children()]
+
+            self.openedChatID = chat_id
+            print(chat_id)
+
+            chat_widget.config(bg=self.bgs["bg1_mid2"]) 
+            [w.config(bg=self.bgs["bg1_mid2"])  for w in chat_widget.winfo_children()]
+            self.activeChat = chat_widget 
+
+
+            for widget in self.msgPanelFrame.winfo_children():
+                widget.destroy()
+                # widget.pack_forget()
+
+
+            msgP_HeaderFrame = tk.Frame(self.msgPanelFrame, bg=self.bgs["bg1_light"], padx=5, pady=10)
+            msgP_HeaderFrame.pack(fill="x",side=tk.TOP)
+
+            tk.Label(msgP_HeaderFrame, text=metaData['name'], bg=msgP_HeaderFrame.cget('bg'), font=('Arial', 11, 'bold')).pack(anchor="w")
+
+            
+        
 # helper events
     def clear_content(self):
         for widget in self.content.winfo_children():
@@ -416,6 +440,17 @@ class KCollabApp:
             for btn in self.nav_buttons:
                 btn.pack(pady=5, padx=5, fill=tk.X)
         self.is_navbar_expanded = not self.is_navbar_expanded
+
+    def chat_MouseEnter(self, chat_widget):
+        if not hasattr(self, "activeChat") or chat_widget != self.activeChat:
+            chat_widget.config(bg=self.bgs["bg1_mid"])
+            [w.config(bg=self.bgs["bg1_mid"])  for w in chat_widget.winfo_children()]
+
+    def chat_MouseLeave(self, chat_widget):
+        if not hasattr(self, "activeChat") or chat_widget != self.activeChat:
+            chat_widget.config(bg=self.bgs["bg1_light"])
+            [w.config(bg=self.bgs["bg1_light"])  for w in chat_widget.winfo_children()]
+
 
 #RELOAD APP 
     def reloadChats(self):
