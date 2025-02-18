@@ -78,12 +78,11 @@ class KCollabApp:
             text="☰", 
             font=('Arial', 16), 
             bg=self.navbar.cget("bg"),
-            fg="white",
-            pady=10, 
+            fg="white", 
             bd=0, 
             command=self.toggle_navbar
         )
-        hamburger_btn.pack(pady=5, padx=5, anchor="w")
+        hamburger_btn.pack(pady=10, padx=5, anchor="w")
 
         # Navbar buttons
         navLinks = [("Dashboard", "📊"), ("Chats", "💬"), ("Tasks", "📋")]
@@ -91,11 +90,12 @@ class KCollabApp:
             'font': ('Arial', 14), 
             'bg': self.navbar.cget("bg"), 
             'fg': "white", 
-            'pady': 10, 
+            'pady': 3, 
             'bd': 0, 
-            'padx': 10, 
+            'padx': 3, 
             'anchor': "w", 
-            'justify': "left"
+            'justify': "left",
+            #"cursor":"hand2"
         }
         self.nav_buttons = []
         self.nav_icons = []        
@@ -107,7 +107,7 @@ class KCollabApp:
                 command=lambda t=text: self.handleNavlinkClick(t), 
                 **navLink_style
             )
-            icon_btn.pack(pady=5)
+            icon_btn.pack(pady=5, padx=5)
             self.nav_icons.append(icon_btn)
 
             text_btn = tk.Button(
@@ -201,7 +201,8 @@ class KCollabApp:
             'activeforeground': "#fff",
             'pady': 1,
             'bd': 0,
-            'padx': 15
+            'padx': 15,
+            'cursor': 'hand2'
         }
         
         tk.Button(filterFrame, text="ALL", **filterBtnStyle).pack(side=tk.LEFT, padx=5)
@@ -225,16 +226,15 @@ class KCollabApp:
             "Vertical.TScrollbar",
             background=[('active', self.bgs["bg4"])],
         )
-        scrollbar = ttk.Scrollbar(chatPanelFrame, orient="vertical", style="Vertical.TScrollbar", command=canvas.yview)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, expand=False)
 
-        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar = ttk.Scrollbar(chatPanelFrame, orient="vertical", style="Vertical.TScrollbar", command=canvas.yview)
+
 
         chatFrame = tk.Frame(canvas, bg= panelBG)
         chatFrame.bind(
             '<Configure>',
             lambda e: canvas.config(
-                scrollregion=(0,0, chatFrame.winfo_reqwidth(), chatFrame.winfo_reqheight())
+                scrollregion=(0,0, chatFrame.winfo_reqwidth(), max(self.root.winfo_height() - 100 ,chatFrame.winfo_reqheight()))
             )
         )
         
@@ -245,6 +245,21 @@ class KCollabApp:
             anchor="nw", 
             width=290
         )
+
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.bind(
+            '<Enter>',
+            lambda e: scrollbar.pack(
+                side=tk.RIGHT, 
+                fill=tk.Y, 
+                expand=False
+            )
+        )
+        canvas.bind(
+            '<Leave>',
+            lambda e: scrollbar.pack_forget()
+        )
         
         chats = requests.get(self.baseURL + "chats/", headers={"Authorization": f"Bearer {self.authToken}"})
         
@@ -254,7 +269,7 @@ class KCollabApp:
             #reload btn
             tk.Button(chatFrame, text="Reload", command=lambda: self.reloadChats() ).pack(ipadx=5, ipady=5, pady=5, padx=5)
 
-        else:            
+        else:
             for i in chats.json():
                 chat_id = i['id']
                 meta = i.get('metaData')
@@ -280,6 +295,18 @@ class KCollabApp:
                     lambda e, item = chat: item.config(bg= panelBG)
                 )
 
+        #messages panel
+        msgPanelFrame = tk.Frame(frame, pady=5, padx=5)
+        msgPanelFrame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        #default contents inside msg panel if no chat selected
+        msgDefaultFrame = tk.Frame(msgPanelFrame, pady=5, padx=5)
+        msgDefaultFrame.pack( padx=10, pady=10)
+
+        tk.Label(msgDefaultFrame, text="K Collab", bg=msgDefaultFrame.cget('bg'), font=('Arial', 18, 'bold')).pack()
+
+        tk.Label(msgDefaultFrame, text="Click on a chat to start messaging.", bg=msgDefaultFrame.cget('bg'), font=('Arial', 12)).pack()
+        
 
 
         return frame
@@ -288,7 +315,7 @@ class KCollabApp:
 
     def createTasksUI(self):
         """Create Tasks UI."""
-        frame = tk.Frame(self.mainFrame, bg="white")
+        frame = tk.Frame(self.content, bg="white")
         tk.Label(frame, text="Tasks Section", font=('Arial', 24), bg="white").pack(pady=20)
         return frame
 
@@ -381,13 +408,13 @@ class KCollabApp:
             for btn in self.nav_buttons:
                 btn.pack_forget()
             for icon in self.nav_icons:
-                icon.pack(pady=5)
+                icon.pack(pady=5, padx=5)
         else:
             self.navbar.configure(width=200)
             for icon in self.nav_icons:
                 icon.pack_forget()
             for btn in self.nav_buttons:
-                btn.pack(pady=5, fill=tk.X)
+                btn.pack(pady=5, padx=5, fill=tk.X)
         self.is_navbar_expanded = not self.is_navbar_expanded
 
 #RELOAD APP 

@@ -26,7 +26,7 @@ class chatSerializer(serializers.ModelSerializer):
             name = otherMember.name
             icon = otherMember.dp
 
-        return {"name": name, "icon": str(icon)}
+        return {"name": str(name).capitalize(), "icon": str(icon)}
         
    
     # def get_members(self, obj):
