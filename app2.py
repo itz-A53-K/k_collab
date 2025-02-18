@@ -180,7 +180,7 @@ class App:
             lambda e: self.chatCanvas.bind_all("<MouseWheel>", 
             lambda e: self.chatCanvas.yview_scroll(int(-1*(e.delta/120)), "units"))
         )
-        self.chatCanvas.bind("<Leave>", lambda e: self.chatCanvas.unbind_all("<MouseWheel>"))
+        self.chatCanvas.bind("<Leave>", lambda e: self.chatCanvas.unbind_all("<MouseWheel>")) #
 
 
         # Message view

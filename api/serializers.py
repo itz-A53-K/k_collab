@@ -9,24 +9,39 @@ class userSerializer(serializers.ModelSerializer):
 
 
 class chatSerializer(serializers.ModelSerializer):
-    members = serializers.SerializerMethodField()
+    # members = serializers.SerializerMethodField()
+    metaData = serializers.SerializerMethodField()
     class Meta:
         model = Chat
-        fields = ['id', 'members', 'is_group_chat'] 
+        fields = ['id', 'metaData', 'is_group_chat'] 
+        
     
-    def get_members(self,obj):
-        users = userSerializer(obj.members, many = True).data
-        filtered_users = [
-            {
-                "name": user["name"],
-                "email": user["email"],
-                "ip_addr": user["ip_addr"],
-                "port": user["port"]
-            }
-            for user in users
-        ]
+    def get_metaData(self, obj):
+        user = self.context['request'].user
+        if obj.is_group_chat:
+            name = obj.team.name
+            icon = obj.team.icon
+        else:
+            otherMember  = obj.members.exclude(id=user.id).first()
+            name = otherMember.name
+            icon = otherMember.dp
 
-        return filtered_users
+        return {"name": name, "icon": str(icon)}
+        
+   
+    # def get_members(self, obj):
+    #     users = userSerializer(obj.members, many = True).data
+    #     filtered_users = [
+    #         {
+    #             "name": user["name"],
+    #             "email": user["email"],
+    #             "ip_addr": user["ip_addr"],
+    #             "port": user["port"]
+    #         }
+    #         for user in users
+    #     ]
+
+    #     return filtered_users
     
 
 class teamSerializer(serializers.ModelSerializer):

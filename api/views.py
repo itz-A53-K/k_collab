@@ -102,9 +102,15 @@ class chatList(generics.ListAPIView):
         chats = user.chats.annotate(
             last_message_time=Max('messages__timestamp')  # Get the max timestamp
         ).order_by('-last_message_time')
-
+        
         return chats
+    
 
+# class chatList(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self):
+#         return Response({"msg":"error"}, status= status.HTTP_404_NOT_FOUND)
 
 class userList(generics.ListAPIView):
     queryset = User.objects.all()

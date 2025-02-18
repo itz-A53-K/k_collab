@@ -18,4 +18,5 @@ dmypy.json
 
 
 kcollab_auth_token.json
-s.css
+*.css
+media/*/*

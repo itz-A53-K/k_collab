@@ -2,3 +2,4 @@ django
 djangorestframework
 requests
 pillow
+customtkinter
