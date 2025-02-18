@@ -1,115 +1,120 @@
 # K-Collab
 
-K-Collab is a collaborative platform that includes features such as user management, team management, task management, and chat functionality. This project is built using Django and Django REST framework.
+K-Collab is a collaborative platform with a Django REST backend and Tkinter desktop client that includes user management, team management, task management, and real-time chat functionality.
 
 ## Features
 
-- User Authentication
-- Team Management
-- Task Management
-- Chat Functionality
+- User Authentication with JWT Tokens
+- Team Management with Group Chat Integration
+- Task & Subtask Management 
+- Individual & Group Chat Functionality
+- Desktop Client UI with Tkinter
 
 ## Installation
 
 1. Clone the repository:
-    ```sh
+    ```bash
     git clone https://github.com/yourusername/k_collab.git
-    cd k_collab
     ```
 
-2. Create a virtual environment and activate it:
-    ```sh
+2. Create and activate virtual environment:
+    ```bash
     python -m venv venv
-    venv/Scripts/activate # On Mac/Linux use `source venv/bin/activate`
+    ```
+    ```bash
+    venv/Scripts/activate
     ```
 
-3. Install the dependencies:
-    ```sh
+3. Install dependencies:
+    ```bash
     pip install -r requirements.txt
     ```
 
-4. Apply the migrations:
-    ```sh
+4. Run migrations:
+    ```bash
     python manage.py migrate
     ```
 
-5. Create a superuser:
-    ```sh
+5. Create superuser:
+    ```bash
     python manage.py createsuperuser
     ```
 
-6. Run the development server:
-    ```sh
+6. Start the server:
+    ```bash
     python manage.py runserver
+    ```
+
+7. Launch desktop client:
+    ```bash
+    python app.py
     ```
 
 ## API Endpoints
 
 ### Authentication
-
 - **Login**: `POST /api/login/`
-    - Request Body: `{ "email": "user@example.com", "password": "password" }`
-    - Response: `{ "message": "Login successful", "authToken": "token" }`
+  - Request: `{"email": "user@example.com", "password": "password"}`
+  - Response: `{"message": "Login successful", "authToken": "token", "user": {...}}`
+
+- **Logout**: `POST /api/logout/`
+  - Requires Authentication
+  - Invalidates current token
 
 ### Teams
-
 - **List/Create Teams**: `GET/POST /api/teams/`
-    - Requires Authentication
-    - Response: List of teams or created team details
+  - Requires Authentication
+  - GET: Returns user's teams ordered by creation date
+  - POST: Creates new team with auto-created group chat
 
-- **Team Content**: `GET /api/teams/<uuid:team_id>/`
-    - Requires Authentication
-    - Response: Team details, tasks, and last message
+- **Team Details**: `GET /api/teams/<uuid:team_id>/`
+  - Returns team details, tasks, and latest message
 
 ### Chats
-
 - **List Chats**: `GET /api/chats/`
-    - Requires Authentication
-    - Response: List of chats
+  - Returns chats ordered by last message time
+  - Includes metadata for both individual and group chats
 
-- **List/Create Messages**: `GET/POST /api/chat/messages/`
-    - Requires Authentication
-    - Request Body (POST): `{ "chat_id": "chat_uuid", "receiver_id": "receiver_uuid", "content": "message content" }`
-    - Response: List of messages or created message details
+- **Messages**: `GET/POST /api/chat/messages/`
+  - GET: Retrieves chat messages with chat_id parameter
+  - POST: Creates message with either chat_id or receiver_id
 
 ## Models
 
 ### User
-
-- [`email`](api/models.py): EmailField (unique)
-- [`name`](api/models.py): CharField
-- [`phone`](api/models.py): CharField (optional)
-- [`dp`](api/models.py): ImageField (optional)
-- [`designation`](api/models.py): CharField (optional)
+- Custom user model with email authentication
+- Fields: email, name, phone, dp, designation, ip_addr, port
 
 ### Team
-
-- [`name`](api/models.py): CharField
-- [`description`](api/models.py): CharField (optional)
-- [`icon`](api/models.py): ImageField (optional)
-- [`members`](api/models.py): ManyToManyField (User)
-- [`chat`](api/models.py): OneToOneField (Chat)
+- UUID primary key
+- Auto-creates associated group chat
+- Fields: name, description, icon, members (M2M with User)
 
 ### Task
+- Assignable to user or team (exclusive)
+- Status choices: 'to do', 'in progress', 'completed'
+- Fields: title, description, deadline, status
 
-- [`title`](api/models.py): CharField
-- [`description`](api/models.py): TextField
-- [`assigned_user`](api/models.py): ForeignKey (User, optional)
-- [`assigned_team`](api/models.py): ForeignKey (Team, optional)
-- [`status`](api/models.py): CharField (choices: 'to do', 'in progress', 'completed')
-- [`deadline`](api/models.py): DateField
+### SubTask
+- Only available for team tasks
+- Inherits deadline from parent task if not specified
+- Fields: title, description, assigned_user, status, deadline
 
 ### Chat
-
-- [`members`](api/models.py): ManyToManyField (User)
-- [`is_group_chat`](api/models.py): BooleanField
+- Supports both individual and group chats
+- UUID primary key
+- Fields: members (M2M with User), is_group_chat
 
 ### Message
+- Timestamped chat messages
+- Fields: sender, chat, content, timestamp
 
-- [`sender`](api/models.py): ForeignKey (User)
-- [`chat`](api/models.py): ForeignKey (Chat)
-- [`content`](api/models.py): TextField
-- [`timestamp`](api/models.py): DateTimeField
+## Desktop Client Features
+
+- Login with token persistence
+- Collapsible navigation sidebar
+- Real-time chat interface
+- Dashboard, Chat, and Task sections
+- Modern UI with custom theme colors
 
 ## License
-
