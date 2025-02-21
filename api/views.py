@@ -12,6 +12,7 @@ from rest_framework.authtoken.models import Token
 
 from .models import *
 from .serializers import *
+import json
 
 
 class messageListCreate(APIView):
@@ -24,8 +25,12 @@ class messageListCreate(APIView):
 
         chat = get_object_or_404(Chat, id=chat_id)
         messages = chat.messages.all().order_by('timestamp') 
-        msgserializer = messageSerializer(messages, many=True)
-        return Response({"chat": chatSerializer(chat).data, "messages": msgserializer.data}, status=status.HTTP_200_OK)
+        msgSerializer = messageSerializer(messages, many=True)
+
+        return Response(
+            msgSerializer.data, 
+            status=status.HTTP_200_OK
+        )
     
     def post(self, request, *args, **kwargs):
         sender = self.request.user
@@ -124,8 +129,10 @@ class updateUserIP(APIView):
     def post(self, request):
         user = request.user
         # ip_addr = request.META['REMOTE_ADDR']
-        ip_addr = '127.0.0.2'
-        port = request.data.get('port', 8000)
+        
+        # ip_addr = '127.0.0.2'
+        ip_addr = '127.0.0.3' 
+        port = request.data.get('port', 5000)
 
         if not ip_addr or not port:
             return Response({"error": "Both IP and Port is required"}, status= status.HTTP_400_BAD_REQUEST)
@@ -134,7 +141,7 @@ class updateUserIP(APIView):
         user.port = port
         user.save()
 
-        return Response({"message": "IP updated", "uID": user.id, "uName": user.name, 'ip': ip_addr, "port": port}, status= status.HTTP_200_OK )
+        return Response({"message": "IP updated", "uID": user.id, "uName": user.name, 'ip': ip_addr, "port": port}, status= status.HTTP_200_OK)
 
 
 

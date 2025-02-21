@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
-import socket, threading, requests, json, re, os, time
+import socket, threading, requests, json, re, os, time, datetime
 
 
 class KCollabApp:
@@ -23,6 +23,7 @@ class KCollabApp:
             "bg4": "#0FAE83",
             "bg5": "#2D3E50",
             "bg6": "#848786",
+            "bg7": "#007bff",
         }
 
         
@@ -41,6 +42,7 @@ class KCollabApp:
         token = self.load_token()
         if token and self.updateIP(token):
             self.initMainUI()
+            self.startP2PServer()
         else:
             self.initLoginUI()
 
@@ -55,8 +57,8 @@ class KCollabApp:
                 self.authToken = token
                 self.user_id = data.get("uID")
                 self.user_name = data.get("uName")
-                hostIP = data.get("ip")
-                hostPort = data.get("port")
+                self.hostIP = data.get("ip")
+                self.hostPort = data.get("port")
 
                 return True
             else:
@@ -212,8 +214,8 @@ class KCollabApp:
         tk.Button(filterFrame, text="ALL", **filterBtnStyle).pack(side=tk.LEFT, padx=5)
         tk.Button(filterFrame, text="GROUPS", **filterBtnStyle).pack(side=tk.LEFT, padx=5)
 
-        canvas = tk.Canvas(chatPanelFrame, bg= panelBG, width=chatPanelFrame.winfo_width())
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        canvas = tk.Canvas(chatPanelFrame, bg= panelBG)
+        canvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
         style = ttk.Style()
         style.theme_use('default')
@@ -231,30 +233,27 @@ class KCollabApp:
             background=[('active', self.bgs["bg4"])],
         )
 
-        scrollbar = ttk.Scrollbar(chatPanelFrame, orient="vertical", style="Vertical.TScrollbar", command=canvas.yview)
+        scrollbar = ttk.Scrollbar(canvas, orient="vertical", style="Vertical.TScrollbar", command=canvas.yview)
 
 
         chatFrame = tk.Frame(canvas, bg= panelBG, padx=5)
+
+        canvasWindow = canvas.create_window((0, 0), window=chatFrame, anchor="nw")
+
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvasWindow, width = canvas.winfo_width() - 5))
+        
+
         chatFrame.bind(
             '<Configure>',
             lambda e: canvas.config(
                 scrollregion=(0,0, chatFrame.winfo_reqwidth(), max(self.root.winfo_height() - 100 ,chatFrame.winfo_reqheight()))
             )
         )
-        
-
-        canvas.create_window(
-            (-2, -2), 
-            window=chatFrame, 
-            anchor="nw", 
-            width=340
-        )
-
-        canvas.configure(yscrollcommand=scrollbar.set)
-
+    
         canvas.bind(
             '<Enter>',
-            lambda e: scrollbar.pack(side=tk.RIGHT, fill=tk.Y, expand=False)
+            lambda e: scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         )
         canvas.bind(
             '<Leave>',
@@ -278,13 +277,15 @@ class KCollabApp:
                 chat.pack(fill="x")
 
                 chat.chat_id = chat_id
+                chat.meta = meta
+                chat.othersMembers = i.get('members')
                 
                 tk.Label(chat, text=meta['name'], bg=panelBG, font=('Arial', 11)).pack(anchor="w")
                 tk.Label(chat, text=meta['name'], bg=panelBG, font=('Arial', 8)).pack(anchor="w")
 
                 chatBindings ={
                     '<MouseWheel>': lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"),
-                    '<Button-1>': lambda e, id=chat_id, mData=meta, chat_widget = chat: self.handleChatClick(id, mData, chat_widget),
+                    '<Button-1>': lambda e,chat_widget = chat: self.handleChatClick(chat_widget),
                     '<Enter>': lambda e, item=chat: self.chat_MouseEnter(item),
                     '<Leave>': lambda e, item=chat: self.chat_MouseLeave(item),
                 }
@@ -371,18 +372,22 @@ class KCollabApp:
         elif section.lower() == "tasks":
             self.initTasks()
         
-    def handleChatClick(self, chat_id, metaData, chat_widget):
+    def handleChatClick(self, chat_widget):
+        chat_id = chat_widget.chat_id
         if self.openedChatID != chat_id:
 
             if hasattr(self, "activeChat"): 
+                # Remove the previous active chat's bgcolor
                 self.activeChat.config(bg=self.bgs["bg1_light"]) 
-                [w.config(bg=self.bgs["bg1_light"])  for w in self.activeChat.winfo_children()]
+                [w.config(bg=self.bgs["bg1_light"]) for w in self.activeChat.winfo_children()]
 
             self.openedChatID = chat_id
+            self.currentPeers = chat_widget.othersMembers
+            metaData = chat_widget.meta
             print(chat_id)
 
             chat_widget.config(bg=self.bgs["bg1_mid2"]) 
-            [w.config(bg=self.bgs["bg1_mid2"])  for w in chat_widget.winfo_children()]
+            [w.config(bg=self.bgs["bg1_mid2"]) for w in chat_widget.winfo_children()]
             self.activeChat = chat_widget 
 
 
@@ -392,12 +397,100 @@ class KCollabApp:
 
 
             msgP_HeaderFrame = tk.Frame(self.msgPanelFrame, bg=self.bgs["bg1_light"], padx=5, pady=10)
-            msgP_HeaderFrame.pack(fill="x",side=tk.TOP)
+            msgP_HeaderFrame.pack(fill="x", side=tk.TOP)
 
             tk.Label(msgP_HeaderFrame, text=metaData['name'], bg=msgP_HeaderFrame.cget('bg'), font=('Arial', 11, 'bold')).pack(anchor="w")
 
+            #msg canvas
+            self.msgCanvas = tk.Canvas(self.msgPanelFrame)
+            self.msgCanvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+            msgP_Scrollbar = ttk.Scrollbar(self.msgCanvas, orient="vertical", command=self.msgCanvas.yview)
+            msgP_Scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+            self.msgCanvas.configure(yscrollcommand=msgP_Scrollbar.set)
+
+            self.msgsFrame = tk.Frame(self.msgCanvas, padx=10)
+
+            msgCanvas_window = self.msgCanvas.create_window((0,0), window=self.msgsFrame, anchor="nw")
+
+            def update_width(event):
+                canvas_width = self.msgCanvas.winfo_width()
+                scrollbar_width = msgP_Scrollbar.winfo_width()
+                self.msgCanvas.itemconfig(msgCanvas_window, width=canvas_width- scrollbar_width -5)
             
-        
+            self.msgCanvas.bind('<Configure>', update_width)
+
+            self.msgsFrame.bind(
+                "<Configure>", 
+                lambda e: self.msgCanvas.configure(
+                    scrollregion= (0, 0, self.msgsFrame.winfo_reqwidth(), max(self.msgCanvas.winfo_height() -5, self.msgsFrame.winfo_reqheight()))
+                )
+            )
+            
+            msgP_HeaderFrame.after(100, lambda: self.msgCanvas.yview_moveto(1))
+
+           
+            #msg input
+            msgInputFrame = tk.Frame(self.msgPanelFrame, bg=self.bgs["bg1_light"], padx=5, pady=5, height=60)
+            msgInputFrame.pack(fill="x",side=tk.BOTTOM)
+
+            self.msgInput = tk.Entry(msgInputFrame, bg="#fff", font=('Arial', 12), name = "msgInput") 
+            self.msgInput.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=3)
+
+            tk.Button(
+                msgInputFrame, 
+                text="Send", 
+                bg=self.bgs['bg3'], 
+                fg="#fff", 
+                font=('Arial', 12),
+                cursor= 'hand2',
+                command= self.sendMessage
+            ).pack(side=tk.RIGHT, padx=3, pady=5)
+
+
+            #populate messages
+            messages = requests.get(f"{self.baseURL}chat/messages/", headers= {"Authorization": f"Bearer {self.authToken}"}, data = {"chat_id": chat_id})
+
+            if messages.status_code == 200:
+                for msg in messages.json() :
+                    sender_id = msg['sender']['id']
+
+                    if sender_id != self.user_id:
+                        sender = msg['sender']['name'] 
+                        align = 'left'
+                    else:
+                        sender ='You'
+                        align = 'right'
+
+                    self.add_message({"sender":sender, "msg":msg['content'], "time": msg['timestamp']}, align)
+
+
+
+            
+    def sendMessage(self):
+        msgInp = self.msgInput.get()
+        if msgInp != "":
+            currentTime = datetime.datetime.now().strftime("%d-%m-%y %I:%M %p")
+
+            msgData = {
+                "sender": self.user_name, 
+                "msg": msgInp, 
+                "time": currentTime
+            }
+
+            self.add_message(msgData, "right")
+
+            self.msgInput.delete(0, tk.END)
+            self.msgCanvas.update_idletasks()
+            self.msgCanvas.yview_moveto(1)
+            
+            self.sendP2PMessage(msgData)
+
+
+
+
+
 # helper events
     def clear_content(self):
         for widget in self.content.winfo_children():
@@ -452,7 +545,42 @@ class KCollabApp:
             [w.config(bg=self.bgs["bg1_light"])  for w in chat_widget.winfo_children()]
 
 
-#RELOAD APP 
+    def add_message(self, data, align):
+        sender = "You" if data['sender'] == self.user_name else data['sender']
+        msg = tk.Frame(self.msgsFrame, bg="white")
+        msg.pack(pady=5, padx=10, anchor="e" if align == "right" else "w")
+
+        bubble_frame = tk.Frame(
+            msg,
+            bg="#dcf8c6" if align == "right" else "#e6e6e6",
+            bd=1,
+            relief="solid"
+        )
+        bubble_frame.pack(side="right" if align == "right" else "left")
+
+        sender_label = tk.Label(bubble_frame, text=sender, bg=bubble_frame.cget("bg"), fg="blue", font=('Arial', 8), padx=5)
+        sender_label.pack(anchor="w")
+
+        message_label = tk.Label(bubble_frame, text=data["msg"], wraplength=self.msgPanelFrame.winfo_width()/1.5, bg=bubble_frame.cget("bg"), font=('Arial', 11), padx=5, justify="left")
+        message_label.pack(anchor="w")
+
+        time_label = tk.Label(bubble_frame, text=data["time"], bg=bubble_frame.cget("bg"), fg="#374747", font=('Arial', 8, 'italic'), padx=5)
+        time_label.pack(anchor="e")
+
+        def scroll_handler(event):
+            self.msgCanvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        bubble_frame.bind("<MouseWheel>", scroll_handler)
+        sender_label.bind("<MouseWheel>", scroll_handler)
+        message_label.bind("<MouseWheel>", scroll_handler)
+        time_label.bind("<MouseWheel>", scroll_handler)
+        self.msgsFrame.bind("<MouseWheel>", scroll_handler)
+
+    
+
+       
+
+#RELOAD events 
     def reloadChats(self):
         print("reloaded")
         self.clear_content()
@@ -461,6 +589,67 @@ class KCollabApp:
         self.initChats()
 
 
+#p2p functions
+
+    def startP2PServer(self):
+        self.activeConnections = {}  # Dictionary to store connections (thread-safe)
+        self.connections_lock = threading.Lock() # Lock for activeConnections
+        def serverThread():
+            server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            server_socket.bind((self.hostIP, self.hostPort))
+            server_socket.listen(100)  # allow multiple connections. 1 = 1 connection, 100 = 100 connections
+            print(f"P2P Server listening on {self.hostIP}:{self.hostPort}")
+
+            while True:  # Accept connections in a loop
+                try:
+                    client_socket, addr = server_socket.accept()
+                    with self.connections_lock:
+                        self.activeConnections[addr] = client_socket
+                    print(f"Connection from {addr}")
+                    threading.Thread(target=self.receivePeerMessage, args=(client_socket, addr), daemon=True).start()
+                except Exception as e:
+                    print(f"Error accepting connection: {e}")
+                    break # or handle the error appropriately
+            server_socket.close() # Close when the loop breaks
+        
+        threading.Thread(target=serverThread, daemon= True).start()
+
+    def receivePeerMessage(self, clientSocket, addr):
+        while True:
+            try:
+                data = clientSocket.recv(1024).decode()
+                if data:
+                    try:
+                        message = json.loads(data) # Parse JSON
+                        self.add_message(message, "left")
+                        self.msgCanvas.update_idletasks()
+                        self.msgCanvas.yview_moveto(1)
+                    except json.JSONDecodeError:
+                        print(f"Invalid JSON from {addr}: {data}")
+                else:
+                    break  # Client disconnected
+            except Exception as e:
+                print(f"Error receiving from {addr}: {e}")
+                break
+
+        with self.connections_lock:
+            del self.activeConnections[addr]
+        clientSocket.close()
+
+    def sendP2PMessage(self, msgData):
+        jsonMsg = json.dumps(msgData)
+        
+        with self.connections_lock:
+            for peer in self.currentPeers:
+                ip = peer['ip_addr']
+                port = peer['port']
+                try:
+                    clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    clientSocket.connect((ip,port))
+                    clientSocket.sendall(jsonMsg.encode())
+                    clientSocket.close()
+                except Exception as e:
+                    print(f"Failed to send message", e)
 
 
 

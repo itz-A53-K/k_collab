@@ -9,17 +9,17 @@ class userSerializer(serializers.ModelSerializer):
 
 
 class chatSerializer(serializers.ModelSerializer):
-    # members = serializers.SerializerMethodField()
+    members = serializers.SerializerMethodField()
     metaData = serializers.SerializerMethodField()
     class Meta:
         model = Chat
-        fields = ['id', 'metaData', 'is_group_chat'] 
+        fields = ['id', 'metaData', 'members', 'is_group_chat'] 
         
     
     def get_metaData(self, obj):
         user = self.context['request'].user
         if obj.is_group_chat:
-            name = obj.team.name
+            name = f"{obj.team.name} (Group)"
             icon = obj.team.icon
         else:
             otherMember  = obj.members.exclude(id=user.id).first()
@@ -29,19 +29,19 @@ class chatSerializer(serializers.ModelSerializer):
         return {"name": str(name).capitalize(), "icon": str(icon)}
         
    
-    # def get_members(self, obj):
-    #     users = userSerializer(obj.members, many = True).data
-    #     filtered_users = [
-    #         {
-    #             "name": user["name"],
-    #             "email": user["email"],
-    #             "ip_addr": user["ip_addr"],
-    #             "port": user["port"]
-    #         }
-    #         for user in users
-    #     ]
+    def get_members(self, obj):
+        user = self.context['request'].user.id
+        users = userSerializer(obj.members.exclude(id = user ), many = True).data
+        filtered_users = [
+            {
+                "name": user["name"],
+                "ip_addr": user["ip_addr"],
+                "port": user["port"]
+            }
+            for user in users
+        ]
 
-    #     return filtered_users
+        return filtered_users
     
 
 class teamSerializer(serializers.ModelSerializer):
@@ -71,7 +71,7 @@ class messageSerializer(serializers.ModelSerializer):
     
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        data['timestamp'] = instance.timestamp.strftime("%d %b %Y %I:%M:%S %p")
+        data['timestamp'] = instance.timestamp.strftime("%d-%m-%y %I:%M %p")
         return data
 
     
