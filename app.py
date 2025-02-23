@@ -3,6 +3,7 @@ from tkinter import ttk
 import socket, threading, requests, json, re, os, time, datetime
 
 
+
 class KCollabApp:
     def __init__(self, root):
         print("App running ...")
@@ -214,8 +215,8 @@ class KCollabApp:
         tk.Button(filterFrame, text="ALL", **filterBtnStyle).pack(side=tk.LEFT, padx=5)
         tk.Button(filterFrame, text="GROUPS", **filterBtnStyle).pack(side=tk.LEFT, padx=5)
 
-        canvas = tk.Canvas(chatPanelFrame, bg= panelBG)
-        canvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        self.chatCanvas = tk.Canvas(chatPanelFrame, bg= panelBG)
+        self.chatCanvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
         style = ttk.Style()
         style.theme_use('default')
@@ -233,66 +234,37 @@ class KCollabApp:
             background=[('active', self.bgs["bg4"])],
         )
 
-        scrollbar = ttk.Scrollbar(canvas, orient="vertical", style="Vertical.TScrollbar", command=canvas.yview)
+        scrollbar = ttk.Scrollbar(self.chatCanvas, orient="vertical", style="Vertical.TScrollbar", command=self.chatCanvas.yview)
 
 
-        chatFrame = tk.Frame(canvas, bg= panelBG, padx=5)
+        self.chatFrame = tk.Frame(self.chatCanvas, bg= panelBG, padx=5)
 
-        canvasWindow = canvas.create_window((0, 0), window=chatFrame, anchor="nw")
+        canvasWindow = self.chatCanvas.create_window((0, 0), window=self.chatFrame, anchor="nw")
 
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvasWindow, width = canvas.winfo_width() - 5))
+        self.chatCanvas.configure(yscrollcommand=scrollbar.set)
+        self.chatCanvas.bind("<Configure>", lambda e: self.chatCanvas.itemconfig(canvasWindow, width = self.chatCanvas.winfo_width() - 5))
         
 
-        chatFrame.bind(
+        self.chatFrame.bind(
             '<Configure>',
-            lambda e: canvas.config(
-                scrollregion=(0,0, chatFrame.winfo_reqwidth(), max(self.root.winfo_height() - 100 ,chatFrame.winfo_reqheight()))
+            lambda e: self.chatCanvas.config(
+                scrollregion=(0,0, self.chatFrame.winfo_reqwidth(), max(self.root.winfo_height() - 100 ,self.chatFrame.winfo_reqheight()))
             )
         )
     
-        canvas.bind(
+        self.chatCanvas.bind(
             '<Enter>',
             lambda e: scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         )
-        canvas.bind(
+        self.chatCanvas.bind(
             '<Leave>',
             lambda e: scrollbar.pack_forget()
         )
         
-        chats = requests.get(self.baseURL + "chats/", headers={"Authorization": f"Bearer {self.authToken}"})
-        
-        if chats.status_code != 200:
-            tk.Label(chatFrame, bg = panelBG, text = "Error Loading Chats", fg ="red").pack(padx=5, pady=10)
-
-            #reload btn
-            tk.Button(chatFrame, text="Reload", command=lambda: self.reloadChats() ).pack(ipadx=5, ipady=5, pady=5, padx=5)
-
-        else:
-            for i in chats.json():
-                chat_id = i['id']
-                meta = i.get('metaData')
-                chat = tk.Frame(chatFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
-                # chat.pack(ipady=10,ipadx=10, fill="x")
-                chat.pack(fill="x")
-
-                chat.chat_id = chat_id
-                chat.meta = meta
-                chat.othersMembers = i.get('members')
-                
-                tk.Label(chat, text=meta['name'], bg=panelBG, font=('Arial', 11)).pack(anchor="w")
-                tk.Label(chat, text=meta['name'], bg=panelBG, font=('Arial', 8)).pack(anchor="w")
-
-                chatBindings ={
-                    '<MouseWheel>': lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"),
-                    '<Button-1>': lambda e,chat_widget = chat: self.handleChatClick(chat_widget),
-                    '<Enter>': lambda e, item=chat: self.chat_MouseEnter(item),
-                    '<Leave>': lambda e, item=chat: self.chat_MouseLeave(item),
-                }
-
-                for event, func in chatBindings.items():
-                    chat.bind(event, func)
-
+        # if self.chat_cache and (time.time() - self.chat_cache_time < CACHE_EXPIRY):
+        #     self.populateChat()
+        # else:
+        self.asyncGetRequest('chats/', self.populateChat)            
                     
         #messages panel
         self.msgPanelFrame = tk.Frame(frame, pady=5, padx=5)
@@ -304,9 +276,7 @@ class KCollabApp:
 
         tk.Label(msgDefaultFrame, text="K Collab", bg=msgDefaultFrame.cget('bg'), font=('Arial', 18, 'bold')).pack()
 
-        tk.Label(msgDefaultFrame, text="Click on a chat to start messaging.", bg=msgDefaultFrame.cget('bg'), font=('Arial', 12)).pack()
-        
-
+        tk.Label(msgDefaultFrame, text="Click on a chat to start messaging.", bg=msgDefaultFrame.cget('bg'), font=('Arial', 12)).pack()      
 
         return frame
 
@@ -450,33 +420,19 @@ class KCollabApp:
 
 
             #populate messages
-            messages = requests.get(f"{self.baseURL}chat/messages/", headers= {"Authorization": f"Bearer {self.authToken}"}, data = {"chat_id": chat_id})
+            self.asyncGetRequest('chat/messages/', self.populateMsgs, data= {"chat_id": chat_id})
 
-            if messages.status_code == 200:
-                for msg in messages.json() :
-                    sender_id = msg['sender']['id']
-
-                    if sender_id != self.user_id:
-                        sender = msg['sender']['name'] 
-                        align = 'left'
-                    else:
-                        sender ='You'
-                        align = 'right'
-
-                    self.add_message({"sender":sender, "msg":msg['content'], "time": msg['timestamp']}, align)
-
+           
 
 
             
     def sendMessage(self):
         msgInp = self.msgInput.get()
         if msgInp != "":
-            currentTime = datetime.datetime.now().strftime("%d-%m-%y %I:%M %p")
-
             msgData = {
                 "sender": self.user_name, 
                 "msg": msgInp, 
-                "time": currentTime
+                "time": datetime.datetime.now().strftime("%d-%m-%y %I:%M %p")
             }
 
             self.add_message(msgData, "right")
@@ -486,8 +442,57 @@ class KCollabApp:
             self.msgCanvas.yview_moveto(1)
             
             self.sendP2PMessage(msgData)
+            self.saveMsg2DB(msgData, msgTime = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
+
+#populate function
+    def populateChat(self, chats):
+            panelBG = self.bgs["bg1_light"]
+        # chats = requests.get(self.baseURL + "chats/", headers={"Authorization": f"Bearer {self.authToken}"})
+        
+        # if chats.status_code != 200:
+        #     tk.Label(self.chatFrame, bg = panelBG, text = "Error Loading Chats", fg ="red").pack(padx=5, pady=10)
+
+        #     #reload btn
+        #     tk.Button(self.chatFrame, text="Reload", command=lambda: self.reloadChats() ).pack(ipadx=5, ipady=5, pady=5, padx=5)
+
+        # else:
+            for i in chats:
+                chat_id = i['id']
+                meta = i.get('metaData')
+                chat = tk.Frame(self.chatFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
+                # chat.pack(ipady=10,ipadx=10, fill="x")
+                chat.pack(fill="x")
+
+                chat.chat_id = chat_id
+                chat.meta = meta
+                chat.othersMembers = i.get('members')
+                
+                tk.Label(chat, text=meta['name'], bg=panelBG, font=('Arial', 11)).pack(anchor="w")
+                tk.Label(chat, text=meta['name'], bg=panelBG, font=('Arial', 8)).pack(anchor="w")
+
+                chatBindings ={
+                    '<MouseWheel>': lambda e: self.chatCanvas.yview_scroll(int(-1*(e.delta/120)), "units"),
+                    '<Button-1>': lambda e,chat_widget = chat: self.handleChatClick(chat_widget),
+                    '<Enter>': lambda e, item=chat: self.chat_MouseEnter(item),
+                    '<Leave>': lambda e, item=chat: self.chat_MouseLeave(item),
+                }
+
+                for event, func in chatBindings.items():
+                    chat.bind(event, func)
 
 
+    def populateMsgs(self, messages):
+        for msg in messages :
+            sender_id = msg['sender']['id']
+
+            if sender_id != self.user_id:
+                sender = msg['sender']['name'] 
+                align = 'left'
+            else:
+                sender ='You'
+                align = 'right'
+
+            self.add_message({"sender":sender, "msg":msg['content'], "time": msg['timestamp']}, align)
 
 
 
@@ -561,11 +566,24 @@ class KCollabApp:
         sender_label = tk.Label(bubble_frame, text=sender, bg=bubble_frame.cget("bg"), fg="blue", font=('Arial', 8), padx=5)
         sender_label.pack(anchor="w")
 
-        message_label = tk.Label(bubble_frame, text=data["msg"], wraplength=self.msgPanelFrame.winfo_width()/1.5, bg=bubble_frame.cget("bg"), font=('Arial', 11), padx=5, justify="left")
+        message_label = tk.Label(
+            bubble_frame, 
+            text=data["msg"], 
+            bg=bubble_frame.cget("bg"), 
+            font=('Arial', 11), 
+            padx=5, 
+            justify="left"
+        )
         message_label.pack(anchor="w")
 
         time_label = tk.Label(bubble_frame, text=data["time"], bg=bubble_frame.cget("bg"), fg="#374747", font=('Arial', 8, 'italic'), padx=5)
         time_label.pack(anchor="e")
+
+        def update_message_label_wraplength(event = None):
+            if message_label and message_label.winfo_exists():
+                message_label.config(wraplength= self.msgPanelFrame.winfo_width()*0.7)
+                self.msgCanvas.yview_moveto(1)
+
 
         def scroll_handler(event):
             self.msgCanvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -576,11 +594,27 @@ class KCollabApp:
         time_label.bind("<MouseWheel>", scroll_handler)
         self.msgsFrame.bind("<MouseWheel>", scroll_handler)
 
+        self.root.bind("<Configure>", update_message_label_wraplength)
+
+        update_message_label_wraplength()
     
+
+    def asyncGetRequest(self, endpoint:str, callback, data = None):
+        def run():
+            header =  {"Authorization": f"Bearer {self.authToken}"}
+            try:
+                resp = requests.get(self.baseURL + endpoint, headers = header, data = data)
+                if resp.status_code == 200:
+                    respData = resp.json()
+                    root.after(0, lambda: callback(respData))
+            except requests.exceptions.RequestException as e:
+                print("Request error:", e)
+        
+        threading.Thread(target=run, daemon=True).start()
 
        
 
-#RELOAD events 
+#RELOAD function 
     def reloadChats(self):
         print("reloaded")
         self.clear_content()
@@ -592,8 +626,8 @@ class KCollabApp:
 #p2p functions
 
     def startP2PServer(self):
-        self.activeConnections = {}  # Dictionary to store connections (thread-safe)
-        self.connections_lock = threading.Lock() # Lock for activeConnections
+        # self.activeConnections = {}  # Dictionary to store connections (thread-safe)
+        # self.connections_lock = threading.Lock() # Lock for activeConnections
         def serverThread():
             server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             server_socket.bind((self.hostIP, self.hostPort))
@@ -603,14 +637,15 @@ class KCollabApp:
             while True:  # Accept connections in a loop
                 try:
                     client_socket, addr = server_socket.accept()
-                    with self.connections_lock:
-                        self.activeConnections[addr] = client_socket
+                    # with self.connections_lock:
+                    #     self.activeConnections[addr] = client_socket
                     print(f"Connection from {addr}")
                     threading.Thread(target=self.receivePeerMessage, args=(client_socket, addr), daemon=True).start()
                 except Exception as e:
                     print(f"Error accepting connection: {e}")
-                    break # or handle the error appropriately
-            server_socket.close() # Close when the loop breaks
+                    # break # or handle the error appropriately
+                    continue
+            # server_socket.close() # Close when the loop breaks
         
         threading.Thread(target=serverThread, daemon= True).start()
 
@@ -632,25 +667,35 @@ class KCollabApp:
                 print(f"Error receiving from {addr}: {e}")
                 break
 
-        with self.connections_lock:
-            del self.activeConnections[addr]
+        # with self.connections_lock:
+        #     del self.activeConnections[addr]
         clientSocket.close()
 
-    def sendP2PMessage(self, msgData):
-        jsonMsg = json.dumps(msgData)
+    def sendP2PMessage(self, data):
+        jsonMsg = json.dumps(data)
         
-        with self.connections_lock:
-            for peer in self.currentPeers:
-                ip = peer['ip_addr']
-                port = peer['port']
-                try:
-                    clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    clientSocket.connect((ip,port))
-                    clientSocket.sendall(jsonMsg.encode())
-                    clientSocket.close()
-                except Exception as e:
-                    print(f"Failed to send message", e)
+        # with self.connections_lock:
+        for peer in self.currentPeers:
+            ip = peer['ip_addr']
+            port = peer['port']
+            try:
+                clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                clientSocket.connect((ip,port))
+                clientSocket.sendall(jsonMsg.encode())
+                clientSocket.close()
+            except Exception as e:
+                print(f"Failed to send message", e)
 
+#DB write functions
+
+    def saveMsg2DB(self, msgData, msgTime):
+        data = {
+            "chat_id" : self.openedChatID,
+            "content" : msgData.get("msg"),
+            "timestamp" : msgTime
+        }
+        resp = requests.post(f"{self.baseURL}chat/messages/", headers= {"Authorization": f"Bearer {self.authToken}"}, data = data)
+        print("msg saved to DB")
 
 
 if __name__ == "__main__":

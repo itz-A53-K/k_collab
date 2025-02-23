@@ -125,7 +125,7 @@ class Message(models.Model):
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name='messages')
     content = models.TextField()
-    timestamp = models.DateTimeField(auto_now_add=True)
+    timestamp = models.DateTimeField()
 
     def __str__(self):
         return f"Message from {self.sender.email}"

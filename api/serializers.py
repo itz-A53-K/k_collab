@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import *
+from datetime import datetime
 
 
 class userSerializer(serializers.ModelSerializer):
@@ -70,8 +71,9 @@ class messageSerializer(serializers.ModelSerializer):
         }
     
     def to_representation(self, instance):
-        data = super().to_representation(instance)
-        data['timestamp'] = instance.timestamp.strftime("%d-%m-%y %I:%M %p")
+        data = super().to_representation(instance) 
+        timestamp =datetime.strptime(str(instance.timestamp), '%Y-%m-%d %H:%M:%S.%f')
+        data['timestamp'] =   timestamp.strftime("%d-%m-%y %I:%M %p")
         return data
 
     

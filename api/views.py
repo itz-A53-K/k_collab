@@ -15,6 +15,7 @@ from .serializers import *
 import json
 
 
+
 class messageListCreate(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -36,8 +37,9 @@ class messageListCreate(APIView):
         sender = self.request.user
         # sender = get_object_or_404(User, id = 2)
         chat_id = request.data.get('chat_id')
-        receiver_id = request.data.get('receiver_id')
+        receiver_id = request.data.get('receiver_id') #required if not a group chat
         content = request.data.get('content')
+        timestamp = request.data.get('timestamp', datetime.now())
 
         if not content:
             return Response({"error": "Content cannot be empty"}, status=status.HTTP_400_BAD_REQUEST)
@@ -65,7 +67,7 @@ class messageListCreate(APIView):
         if sender not in chat.members.all():
             return Response({"error": "You are not a member of this chat"}, status=status.HTTP_403_FORBIDDEN)
         
-        message = Message.objects.create(sender=sender, content=content, chat=chat)
+        message = Message.objects.create(sender=sender, chat=chat, content=content, timestamp = timestamp)
         serializer = messageSerializer(message)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
                 
@@ -79,6 +81,8 @@ class teamListCreate(generics.ListCreateAPIView):
         user = self.request.user
         teams = user.teams.all().order_by('-created_at')
         return teams
+
+    
 
 
 #tasks and other content related to a specific team
@@ -111,12 +115,6 @@ class chatList(generics.ListAPIView):
         return chats
     
 
-# class chatList(APIView):
-#     permission_classes = [IsAuthenticated]
-
-#     def get(self):
-#         return Response({"msg":"error"}, status= status.HTTP_404_NOT_FOUND)
-
 class userList(generics.ListAPIView):
     queryset = User.objects.all()
     serializer_class = userSerializer
@@ -128,10 +126,10 @@ class updateUserIP(APIView):
 
     def post(self, request):
         user = request.user
-        # ip_addr = request.META['REMOTE_ADDR']
+        ip_addr = request.META['REMOTE_ADDR']
         
-        # ip_addr = '127.0.0.2'
-        ip_addr = '127.0.0.3' 
+        ip_addr = '127.0.0.2'
+        # ip_addr = '127.0.0.3' 
         port = request.data.get('port', 5000)
 
         if not ip_addr or not port:
