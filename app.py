@@ -285,7 +285,40 @@ class KCollabApp:
     def createTasksUI(self):
         """Create Tasks UI."""
         frame = tk.Frame(self.content, bg="white")
-        tk.Label(frame, text="Tasks Section", font=('Arial', 24), bg="white").pack(pady=20)
+
+        header = tk.Label(frame, text="Tasks", bg= "white", font=('Arial', 20)).pack(side=tk.TOP, anchor='w', padx=10)
+
+        cardsCanvas = tk.Canvas(frame, bg= "white")
+        cardsCanvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        scrollbar = ttk.Scrollbar(cardsCanvas, orient="vertical", command=cardsCanvas.yview)
+
+
+        cardsFrame = tk.Frame(cardsCanvas, bg= "white", padx=5)
+
+        canvasWindow = cardsCanvas.create_window((0, 0), window=cardsFrame, anchor="nw")
+
+        cardsCanvas.configure(yscrollcommand=scrollbar.set)
+        cardsCanvas.bind("<Configure>", lambda e: cardsCanvas.itemconfig(canvasWindow, width = cardsCanvas.winfo_width() - 5))
+
+        cardsFrame.bind(
+            '<Configure>',
+            lambda e: cardsCanvas.config(
+                scrollregion=(0,0, cardsFrame.winfo_reqwidth(), max(self.root.winfo_height() - 100 ,cardsFrame.winfo_reqheight()))
+            )
+        )
+        cardsFrame.bind("<MouseWheel>", lambda event: cardsCanvas.yview_scroll(int(-1 * (event.delta / 120)), "units"))
+        col = 0
+        for i in range(500):
+            row = int(i/5 +1)
+            col+=1
+            if col > 5:
+                col = 1
+            card = tk.Frame(cardsFrame, bg="green")
+            card.grid(column = col, row = row, pady=5, padx=5)
+            tk.Label(card, text=f"card {i}", pady=5, padx=5, bg= "green", fg="red").pack(side= tk.LEFT, pady=3)
+
+            card.bind("<MouseWheel>", lambda event: cardsCanvas.yview_scroll(int(-1 * (event.delta / 120)), "units"))
         return frame
 
 
