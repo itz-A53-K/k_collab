@@ -55,7 +55,7 @@ class teamSerializer(serializers.ModelSerializer):
 class taskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
-        fields = ['id', 'title', 'description', 'status', 'deadline']
+        fields = ['id', 'title', 'deadline']
 
 
 class messageSerializer(serializers.ModelSerializer):
@@ -63,6 +63,7 @@ class messageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = ['id', 'sender', 'content', 'timestamp']
+
     def get_sender(self, obj):
         return {
             'id': obj.sender.id,
@@ -71,9 +72,13 @@ class messageSerializer(serializers.ModelSerializer):
         }
     
     def to_representation(self, instance):
-        data = super().to_representation(instance) 
-        timestamp =datetime.strptime(str(instance.timestamp), '%Y-%m-%d %H:%M:%S.%f')
-        data['timestamp'] =   timestamp.strftime("%d-%m-%y %I:%M %p")
+
+        data = super().to_representation(instance)
+        timestamp = instance.timestamp
+
+        if isinstance(timestamp, str):
+            timestamp = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
+        data['timestamp'] = timestamp.strftime("%d-%m-%y %I:%M %p")
         return data
 
     

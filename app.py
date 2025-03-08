@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
-import socket, threading, requests, json, re, os, time, datetime
+import socket, threading, requests, json, re, os, time, datetime, inspect  
 
 
 
@@ -26,6 +26,8 @@ class KCollabApp:
             "bg6": "#848786",
             "bg7": "#007bff",
         }
+
+        self.card_widgets = []
 
         
 
@@ -92,7 +94,7 @@ class KCollabApp:
         hamburger_btn.pack(pady=10, padx=5, anchor="w")
 
         # Navbar buttons
-        navLinks = [("Dashboard", "📊"), ("Chats", "💬"), ("Tasks", "📋")]
+        navLinks = [("Dashboard", "📊"), ("Tasks", "📋"), ("Teams", "🧑‍👨‍👦"), ("Chats", "💬")]
         navLink_style = {
             'font': ('Arial', 14), 
             'bg': self.navbar.cget("bg"), 
@@ -186,143 +188,39 @@ class KCollabApp:
 
 
     def createChatsUI(self):
-        frame = tk.Frame(self.content, bg="white")
-
-        # chats panel 
-        panelBG = self.bgs["bg1_light"]
-
-        chatPanelFrame = tk.Frame(frame, width=350, bg=panelBG, pady=5, padx=5)
-        chatPanelFrame.pack(side=tk.LEFT, fill=tk.Y)
-        chatPanelFrame.pack_propagate(False)
-
-        chatsFrameHeader = tk.Label(chatPanelFrame, text="Chats", bg= panelBG, font=('Arial', 16, 'bold')).pack(side=tk.TOP, anchor='w', padx=10)
-
-        filterFrame = tk.Frame(chatPanelFrame, bg=panelBG, pady=5, padx=5)
-        filterFrame.pack(side=tk.TOP, anchor='w' , fill=tk.X, pady=10)
-
-        filterBtnStyle = {
-            'font': ('Arial', 11),
-            'bg': self.bgs["bg4"],
-            'fg': "#fff",
-            "activebackground": self.bgs['bg5'],
-            'activeforeground': "#fff",
-            'pady': 1,
-            'bd': 0,
-            'padx': 15,
-            'cursor': 'hand2'
+        content = {
+            "title": "Chats",
+            "variablePrefix": "chat",
+            "filters": ["ALL", "GROUPS"],
+            "api":{
+                "endpoint": "chats/",
+                "callback": "populateChat",
+            },
+            "defaultMsg": "Click on a chat to start messaging.",
         }
-        
-        tk.Button(filterFrame, text="ALL", **filterBtnStyle).pack(side=tk.LEFT, padx=5)
-        tk.Button(filterFrame, text="GROUPS", **filterBtnStyle).pack(side=tk.LEFT, padx=5)
-
-        self.chatCanvas = tk.Canvas(chatPanelFrame, bg= panelBG)
-        self.chatCanvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-
-        style = ttk.Style()
-        style.theme_use('default')
-        style.configure(
-            "Vertical.TScrollbar",
-            background=self.bgs["bg4"],
-            arrowcolor=self.bgs["bg4"],
-            troughcolor=panelBG,
-            arrowsize=0,
-            borderwidth= 0,
-            width = 3
-        )
-        style.map(
-            "Vertical.TScrollbar",
-            background=[('active', self.bgs["bg4"])],
-        )
-
-        scrollbar = ttk.Scrollbar(self.chatCanvas, orient="vertical", style="Vertical.TScrollbar", command=self.chatCanvas.yview)
-
-
-        self.chatFrame = tk.Frame(self.chatCanvas, bg= panelBG, padx=5)
-
-        canvasWindow = self.chatCanvas.create_window((0, 0), window=self.chatFrame, anchor="nw")
-
-        self.chatCanvas.configure(yscrollcommand=scrollbar.set)
-        self.chatCanvas.bind("<Configure>", lambda e: self.chatCanvas.itemconfig(canvasWindow, width = self.chatCanvas.winfo_width() - 5))
-        
-
-        self.chatFrame.bind(
-            '<Configure>',
-            lambda e: self.chatCanvas.config(
-                scrollregion=(0,0, self.chatFrame.winfo_reqwidth(), max(self.root.winfo_height() - 100 ,self.chatFrame.winfo_reqheight()))
-            )
-        )
-    
-        self.chatCanvas.bind(
-            '<Enter>',
-            lambda e: scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        )
-        self.chatCanvas.bind(
-            '<Leave>',
-            lambda e: scrollbar.pack_forget()
-        )
-        
-        # if self.chat_cache and (time.time() - self.chat_cache_time < CACHE_EXPIRY):
-        #     self.populateChat()
-        # else:
-        self.asyncGetRequest('chats/', self.populateChat)            
-                    
-        #messages panel
-        self.msgPanelFrame = tk.Frame(frame, pady=5, padx=5)
-        self.msgPanelFrame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        #default contents inside msg panel if no chat selected
-        msgDefaultFrame = tk.Frame(self.msgPanelFrame)
-        msgDefaultFrame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-
-        tk.Label(msgDefaultFrame, text="K Collab", bg=msgDefaultFrame.cget('bg'), font=('Arial', 18, 'bold')).pack()
-
-        tk.Label(msgDefaultFrame, text="Click on a chat to start messaging.", bg=msgDefaultFrame.cget('bg'), font=('Arial', 12)).pack()      
-
+        frame = tk.Frame(self.content, bg="white")
+        self.layout1(frame, json.dumps(content))
         return frame
 
 
 
     def createTasksUI(self):
-        """Create Tasks UI."""
+        content = {
+            "title": "Tasks",
+            "variablePrefix": "task",
+            "filters":["IN PROGRESS", "TO DO", "COMPLETED"],
+            "api":{
+                "endpoint": "tasks/",
+                "data": {
+                    "filter": "in progress"
+                },
+                "callback": "populateTasks",
+            },
+            "defaultMsg": "Click on a task to view details.",
+        }
         frame = tk.Frame(self.content, bg="white")
-
-        header = tk.Label(frame, text="Tasks", bg= "white", font=('Arial', 20)).pack(side=tk.TOP, anchor='w', padx=10)
-
-        cardsCanvas = tk.Canvas(frame, bg= "white")
-        cardsCanvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-
-        scrollbar = ttk.Scrollbar(cardsCanvas, orient="vertical", command=cardsCanvas.yview)
-
-
-        cardsFrame = tk.Frame(cardsCanvas, bg= "white", padx=5)
-
-        canvasWindow = cardsCanvas.create_window((0, 0), window=cardsFrame, anchor="nw")
-
-        cardsCanvas.configure(yscrollcommand=scrollbar.set)
-        cardsCanvas.bind("<Configure>", lambda e: cardsCanvas.itemconfig(canvasWindow, width = cardsCanvas.winfo_width() - 5))
-
-        cardsFrame.bind(
-            '<Configure>',
-            lambda e: cardsCanvas.config(
-                scrollregion=(0,0, cardsFrame.winfo_reqwidth(), max(self.root.winfo_height() - 100 ,cardsFrame.winfo_reqheight()))
-            )
-        )
-        cardsFrame.bind("<MouseWheel>", lambda event: cardsCanvas.yview_scroll(int(-1 * (event.delta / 120)), "units"))
-        col = 0
-        for i in range(500):
-            row = int(i/5 +1)
-            col+=1
-            if col > 5:
-                col = 1
-            card = tk.Frame(cardsFrame, bg="green")
-            card.grid(column = col, row = row, pady=5, padx=5)
-            tk.Label(card, text=f"card {i}", pady=5, padx=5, bg= "green", fg="red").pack(side= tk.LEFT, pady=3)
-
-            card.bind("<MouseWheel>", lambda event: cardsCanvas.yview_scroll(int(-1 * (event.delta / 120)), "units"))
+        self.layout1(frame, json.dumps(content))
         return frame
-
-
-
 
 
 #click handle events
@@ -378,6 +276,7 @@ class KCollabApp:
     def handleChatClick(self, chat_widget):
         chat_id = chat_widget.chat_id
         if self.openedChatID != chat_id:
+            print("chat_id: ", chat_id)
 
             if hasattr(self, "activeChat"): 
                 # Remove the previous active chat's bgcolor
@@ -387,25 +286,25 @@ class KCollabApp:
             self.openedChatID = chat_id
             self.currentPeers = chat_widget.othersMembers
             metaData = chat_widget.meta
-            print(chat_id)
+            msgPanelFrame = getattr(self,"chat_rightPanelFrame")
 
             chat_widget.config(bg=self.bgs["bg1_mid2"]) 
             [w.config(bg=self.bgs["bg1_mid2"]) for w in chat_widget.winfo_children()]
             self.activeChat = chat_widget 
 
 
-            for widget in self.msgPanelFrame.winfo_children():
+            for widget in msgPanelFrame.winfo_children():
                 widget.destroy()
                 # widget.pack_forget()
 
 
-            msgP_HeaderFrame = tk.Frame(self.msgPanelFrame, bg=self.bgs["bg1_light"], padx=5, pady=10)
+            msgP_HeaderFrame = tk.Frame(msgPanelFrame, bg=self.bgs["bg1_light"], padx=5, pady=10)
             msgP_HeaderFrame.pack(fill="x", side=tk.TOP)
 
             tk.Label(msgP_HeaderFrame, text=metaData['name'], bg=msgP_HeaderFrame.cget('bg'), font=('Arial', 11, 'bold')).pack(anchor="w")
 
             #msg canvas
-            self.msgCanvas = tk.Canvas(self.msgPanelFrame)
+            self.msgCanvas = tk.Canvas(msgPanelFrame)
             self.msgCanvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
             msgP_Scrollbar = ttk.Scrollbar(self.msgCanvas, orient="vertical", command=self.msgCanvas.yview)
@@ -435,7 +334,7 @@ class KCollabApp:
 
            
             #msg input
-            msgInputFrame = tk.Frame(self.msgPanelFrame, bg=self.bgs["bg1_light"], padx=5, pady=5, height=60)
+            msgInputFrame = tk.Frame(msgPanelFrame, bg=self.bgs["bg1_light"], padx=5, pady=5, height=60)
             msgInputFrame.pack(fill="x",side=tk.BOTTOM)
 
             self.msgInput = tk.Entry(msgInputFrame, bg="#fff", font=('Arial', 12), name = "msgInput") 
@@ -455,7 +354,8 @@ class KCollabApp:
             #populate messages
             self.asyncGetRequest('chat/messages/', self.populateMsgs, data= {"chat_id": chat_id})
 
-           
+    def createTask(self):
+        pass
 
 
             
@@ -475,11 +375,13 @@ class KCollabApp:
             self.msgCanvas.yview_moveto(1)
             
             self.sendP2PMessage(msgData)
-            self.saveMsg2DB(msgData, msgTime = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
+            self.saveMsg2DB(msgData, msgTime = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"))
 
 #populate function
     def populateChat(self, chats):
             panelBG = self.bgs["bg1_light"]
+            canvas = getattr(self,"chat_canvas")
+            canvasFrame = getattr(self,"chat_canvasFrame")
         # chats = requests.get(self.baseURL + "chats/", headers={"Authorization": f"Bearer {self.authToken}"})
         
         # if chats.status_code != 200:
@@ -492,7 +394,7 @@ class KCollabApp:
             for i in chats:
                 chat_id = i['id']
                 meta = i.get('metaData')
-                chat = tk.Frame(self.chatFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
+                chat = tk.Frame(canvasFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
                 # chat.pack(ipady=10,ipadx=10, fill="x")
                 chat.pack(fill="x")
 
@@ -504,7 +406,7 @@ class KCollabApp:
                 tk.Label(chat, text=meta['name'], bg=panelBG, font=('Arial', 8)).pack(anchor="w")
 
                 chatBindings ={
-                    '<MouseWheel>': lambda e: self.chatCanvas.yview_scroll(int(-1*(e.delta/120)), "units"),
+                    '<MouseWheel>': lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"),
                     '<Button-1>': lambda e,chat_widget = chat: self.handleChatClick(chat_widget),
                     '<Enter>': lambda e, item=chat: self.chat_MouseEnter(item),
                     '<Leave>': lambda e, item=chat: self.chat_MouseLeave(item),
@@ -528,7 +430,41 @@ class KCollabApp:
             self.add_message({"sender":sender, "msg":msg['content'], "time": msg['timestamp']}, align)
 
 
+    def populateTasks(self, tasks):  
+            panelBG = self.bgs["bg1_light"]
+            canvas = getattr(self,"task_canvas")
+            canvasFrame = getattr(self,"task_canvasFrame")
+        # chats = requests.get(self.baseURL + "chats/", headers={"Authorization": f"Bearer {self.authToken}"})
+        
+        # if chats.status_code != 200:
+        #     tk.Label(self.chatFrame, bg = panelBG, text = "Error Loading Chats", fg ="red").pack(padx=5, pady=10)
 
+        #     #reload btn
+        #     tk.Button(self.chatFrame, text="Reload", command=lambda: self.reloadChats() ).pack(ipadx=5, ipady=5, pady=5, padx=5)
+
+        # else:
+            for task in tasks:
+                task_id = task['id']
+                taskFrame = tk.Frame(canvasFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
+                taskFrame.pack(fill="x")
+
+                taskFrame.task_id = task_id
+                
+                tk.Label(taskFrame, text=f"Task #{task_id}", bg=panelBG, font=('Arial', 10, "bold italic underline")).pack(anchor="w")
+                tk.Label(taskFrame, text=task.get('title'), bg=panelBG, font=('Arial', 13)).pack(anchor="w")
+                tk.Label(taskFrame, text=f"Deadline: {task.get('deadline')}", bg=panelBG, font=('Arial', 9)).pack(anchor="w")
+
+                bindings ={
+                    '<MouseWheel>': lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"),
+                    '<Button-1>': lambda e,chat_widget = taskFrame: self.handleChatClick(chat_widget),
+                    '<Enter>': lambda e, item=taskFrame: self.chat_MouseEnter(item),
+                    '<Leave>': lambda e, item=taskFrame: self.chat_MouseLeave(item),
+                }
+
+                for event, func in bindings.items():
+                    taskFrame.bind(event, func)   
+    
+    
 # helper events
     def clear_content(self):
         for widget in self.content.winfo_children():
@@ -614,7 +550,7 @@ class KCollabApp:
 
         def update_message_label_wraplength(event = None):
             if message_label and message_label.winfo_exists():
-                message_label.config(wraplength= self.msgPanelFrame.winfo_width()*0.7)
+                message_label.config(wraplength= getattr(self,"chat_rightPanelFrame").winfo_width()*0.7)
                 self.msgCanvas.yview_moveto(1)
 
 
@@ -645,11 +581,10 @@ class KCollabApp:
         
         threading.Thread(target=run, daemon=True).start()
 
-       
+
 
 #RELOAD function 
     def reloadChats(self):
-        print("reloaded")
         self.clear_content()
 
         self.chats_frame = self.createChatsUI()
@@ -729,6 +664,120 @@ class KCollabApp:
         }
         resp = requests.post(f"{self.baseURL}chat/messages/", headers= {"Authorization": f"Bearer {self.authToken}"}, data = data)
         print("msg saved to DB")
+
+
+#UI layout
+
+
+    def layout1(self, frame, content):
+        content = json.loads(content)
+        panelBG = self.bgs["bg1_light"]
+
+        leftPanalFrame = tk.Frame(frame, bg=panelBG, width=350, padx=5, pady=5)
+        leftPanalFrame.pack(side=tk.LEFT, fill=tk.Y)
+        leftPanalFrame.pack_propagate(False)
+
+        title = tk.Label(leftPanalFrame, text=content.get("title"), bg=panelBG, font=("Arial", 16, "bold")).pack(side=tk.TOP, anchor=tk.W, padx=10)
+
+        filterFrame = tk.Frame(leftPanalFrame, bg=panelBG, pady=5, padx=5)
+        filterFrame.pack(side=tk.TOP, anchor=tk.W, fill=tk.X, pady=10)
+
+        filterBtnStyle = {
+            'font': ('Arial', 10),
+            'bg': self.bgs["bg4"],
+            'fg': "#fff",
+            "activebackground": self.bgs['bg5'],
+            'activeforeground': "#fff",
+            'pady': 1,
+            'bd': 0,
+            'padx': 15,
+            'cursor': 'hand2'
+        }
+        filterBtns = []
+        for filter in content.get("filters"):
+            btn = tk.Button(filterFrame, text=filter, **filterBtnStyle)
+            btn.pack(side=tk.LEFT, padx=5)
+            filterBtns.append(btn)
+            
+        filterBtns[0].config(bg=self.bgs["bg5"])
+
+        canvas = tk.Canvas(leftPanalFrame, bg=panelBG)
+        canvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        style = ttk.Style()
+        style.theme_use('default')
+        style.configure(
+            "Vertical.TScrollbar",
+            background=self.bgs["bg4"],
+            arrowcolor=self.bgs["bg4"],
+            troughcolor=panelBG,
+            arrowsize=0,
+            borderwidth=0,
+            width=3
+        )
+        style.map(
+            "Vertical.TScrollbar",
+            background=[('active', self.bgs["bg4"])],
+        )
+
+        scrollbar = ttk.Scrollbar(canvas, orient="vertical", style="Vertical.TScrollbar", command=canvas.yview)
+
+        canvasFrame = tk.Frame(canvas, bg=panelBG)
+
+        canvasWindow = canvas.create_window((0, 0), window=canvasFrame, anchor="nw")
+
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvasWindow, width=canvas.winfo_width() - 5))
+
+        canvasFrame.bind(
+            "<Configure>",
+            lambda e: canvas.config(
+                scrollregion=(0, 0, canvasFrame.winfo_reqwidth(), max(self.root.winfo_height() - 100, canvasFrame.winfo_reqheight()))
+            )
+        )
+
+        canvas.bind(
+            '<Enter>',
+            lambda e: scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        )
+        canvas.bind(
+            '<Leave>',
+            lambda e: scrollbar.pack_forget()
+        )
+
+        # Handle asyncGetRequest
+        endpoint = content.get("api").get("endpoint")
+        callback_name = content.get("api").get("callback")
+        data = content.get("api").get("data")
+
+        if callback_name and endpoint:
+            callback_func = getattr(self, callback_name, None) 
+
+            if callable(callback_func):
+                self.asyncGetRequest(endpoint, callback_func, data)
+
+        rightPanelFrame = tk.Frame(frame, bg="white", padx=5, pady=5)
+        rightPanelFrame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        defaultFrame = tk.Frame(rightPanelFrame)
+        defaultFrame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+
+        tk.Label(defaultFrame, text="K Collab", bg=defaultFrame.cget('bg'), font=('Arial', 18, 'bold')).pack()
+
+        tk.Label(defaultFrame, text=content.get("defaultMsg"), bg=defaultFrame.cget('bg'), font=('Arial', 12)).pack()
+
+        # creating dynamic global variables
+        prefix = content.get("variablePrefix")
+        setattr(self, f"{prefix}_canvas", canvas)
+        setattr(self, f"{prefix}_rightPanelFrame", rightPanelFrame)
+        setattr(self, f"{prefix}_canvasFrame", canvasFrame)
+
+
+
+        
+
+
+
 
 
 if __name__ == "__main__":

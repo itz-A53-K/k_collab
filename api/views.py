@@ -12,7 +12,24 @@ from rest_framework.authtoken.models import Token
 
 from .models import *
 from .serializers import *
+from itertools import chain
 import json
+
+
+class taskList(generics.ListAPIView):
+    serializer_class = taskSerializer
+    permission_classes = [IsAuthenticated]
+
+
+    def get_queryset(self):
+        user = self.request.user
+        filter = self.request.data.get('filter', "in progress")
+        print(filter)
+        tasks = list(user.tasks.filter(status = filter))
+        subtasks = list(user.subtasks.filter(status = filter))
+        combined_list = list(chain(tasks, subtasks))
+        return combined_list 
+
 
 
 
@@ -82,7 +99,7 @@ class teamListCreate(generics.ListCreateAPIView):
         teams = user.teams.all().order_by('-created_at')
         return teams
 
-    
+
 
 
 #tasks and other content related to a specific team
@@ -96,7 +113,7 @@ class teamContent(APIView):
 
         data = {
             'team': teamSerializer(team).data,
-            'tasks': taskSerializer(tasks, many=True).data if tasks else {"msg": "No tasks yet"},
+            'tasks': taskSerializer(tasks, many=True).data if tasks else {"msg": "No task yet"},
             'last message': messageSerializer(lastMsg).data if lastMsg else {"msg": "No message"},  #latest message 
         }
         return Response(data, status=status.HTTP_200_OK)
