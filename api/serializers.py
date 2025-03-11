@@ -52,10 +52,11 @@ class teamSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'description', 'icon', 'members']
 
 
+# 
 class taskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
-        fields = ['id', 'title', 'deadline']
+        fields = ['id', 'title', 'description', 'deadline', 'status']
 
 
 class messageSerializer(serializers.ModelSerializer):

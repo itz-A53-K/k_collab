@@ -24,10 +24,12 @@ class taskList(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         filter = self.request.data.get('filter', "in progress")
-        print(filter)
         tasks = list(user.tasks.filter(status = filter))
         subtasks = list(user.subtasks.filter(status = filter))
         combined_list = list(chain(tasks, subtasks))
+
+        combined_list.sort(key=lambda item: item.deadline)
+
         return combined_list 
 
 

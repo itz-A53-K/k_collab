@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+from django.utils import timezone
 import socket, threading, requests, json, re, os, time, datetime, inspect  
 
 
@@ -27,14 +28,14 @@ class KCollabApp:
             "bg7": "#007bff",
         }
 
-        self.card_widgets = []
 
+        self.openedTaskID = None
+        self.openedChatID = None
         
 
         # self.isMsgUI_init = False
         self.baseURL = "http://127.0.0.1:8000/api/"
 
-        self.openedChatID = None
 
         self.mainFrame = tk.Frame(self.root, bg= self.bgs["bg6"])
         self.mainFrame.pack(fill=tk.BOTH, expand=True)
@@ -203,16 +204,15 @@ class KCollabApp:
         return frame
 
 
-
     def createTasksUI(self):
         content = {
             "title": "Tasks",
             "variablePrefix": "task",
-            "filters":["IN PROGRESS", "TO DO", "COMPLETED"],
+            "filters":["TO DO", "IN PROGRESS", "COMPLETED"],
             "api":{
                 "endpoint": "tasks/",
                 "data": {
-                    "filter": "in progress"
+                    "filter": "to do"
                 },
                 "callback": "populateTasks",
             },
@@ -354,6 +354,90 @@ class KCollabApp:
             #populate messages
             self.asyncGetRequest('chat/messages/', self.populateMsgs, data= {"chat_id": chat_id})
 
+    def handleTaskClick(self, task_widget):
+
+        task_id = task_widget.task_id
+        if self.openedTaskID != task_id:
+
+            self.openedTaskID = task_id
+
+            data = json.loads(task_widget.task_data)
+            status = data.get('status')
+
+            taskDetailFrame = getattr(self,"task_rightPanelFrame")
+            bgc = taskDetailFrame.cget('bg')
+
+            for widget in taskDetailFrame.winfo_children():
+                widget.destroy()
+                # widget.pack_forget()
+
+            taskDetailFrame.config(padx= 10, pady= 15)
+            tk.Label(taskDetailFrame, text=f"Task #{task_id}", bg= bgc, font=('Arial', 16, 'bold italic underline')).pack(anchor="w", pady=10)
+
+            dataFrame = tk.Frame(taskDetailFrame, bg=bgc)
+            dataFrame.pack(fill="x", side=tk.TOP, pady=15, ipadx=5)
+
+            f1 = tk.Frame(dataFrame, bg=bgc, pady= 5)
+            f1.pack(anchor="w", fill="x")
+
+            tk.Label(f1, text = 'Title: ', bg = bgc, font = ('Arial', 13, 'bold')).grid(row=0, column=0, sticky='nw')
+            tk.Label(f1, text = data.get('title').capitalize(), bg = bgc, font = ('Arial', 13)).grid(row=0, column=1, sticky='nw')
+
+
+            f2 = tk.Frame(dataFrame, bg=bgc, pady=5)
+            f2.pack(anchor="w", fill="x")
+
+            tk.Label(f2, text='Description:', bg=bgc, font=('Arial', 13, 'bold')).grid(row=0, column=0, sticky='nw')
+            descLabel = tk.Label(f2, text=data.get('desc').capitalize(), bg=bgc, font=('Arial', 13), justify="left")
+            descLabel.grid(row=0, column=1, sticky='nw')
+
+
+            f3 = tk.Frame(dataFrame, bg= bgc, pady= 5)
+            f3.pack(anchor="w", fill="x")
+
+            tk.Label(f3, text = 'Deadline: ', bg = bgc, font = ('Arial', 13, 'bold'), pady=5).grid(row=0, column=0, sticky='nw')
+            tk.Label(f3, text = data.get('deadline'), bg = bgc, font = ('Arial', 13), pady=5).grid(row=0, column=1, sticky='nw')
+
+
+            f4 = tk.Frame(dataFrame, bg= bgc, pady= 5)
+            f4.pack(anchor="w", fill="x")
+
+            tk.Label(f4, text = 'Status: ', bg = bgc, font = ('Arial', 13, 'bold'), pady=5).grid(row=0, column=0, sticky='nw')
+            tk.Label(f4, text = str(status).upper(), bg = bgc, font = ('Arial', 13), pady=5).grid(row=0, column=1, sticky='nw')
+
+
+            overdue = data.get('overdue')
+            btnStyle ={
+                "fg": "#fff",
+                "font": ('Arial', 12, 'bold'),
+                "pady": 5, 
+                "cursor": 'hand2',
+                "bd": 1
+            }
+
+            if status == "completed":
+                btn = tk.Label(dataFrame, text="Completed", bg="green", **btnStyle)
+            elif overdue:
+                btn = tk.Label(dataFrame, text="Overdue", bg="red", **btnStyle)
+            else:
+                if status == 'to do': txt = "Start Task" 
+                elif status == 'in progress': txt ="Mark as Complete" 
+
+                btn = tk.Button(dataFrame, text=txt, bg=self.bgs['bg4'], **btnStyle)
+
+            btn.pack(anchor="e", pady=10, padx=25, ipadx=10, ipady=5)
+
+
+
+            def setDescWraplength(e, desc_label):                
+                desc_label.config(wraplength= taskDetailFrame.winfo_width() / 1.27)     
+
+            setDescWraplength(None, descLabel)
+
+            taskDetailFrame.bind("<Configure>", lambda event: setDescWraplength(event, descLabel))
+
+        
+
     def createTask(self):
         pass
 
@@ -445,18 +529,40 @@ class KCollabApp:
         # else:
             for task in tasks:
                 task_id = task['id']
+                deadline = task.get('deadline')
+                
+                today = datetime.date.today()
+                time_diff = (datetime.datetime.strptime(deadline, '%Y-%m-%d').date() - today).days
+
+                if time_diff < 0:
+                    color= '#8B0000'  # Overdue
+                elif time_diff == 0:
+                    color= 'red'  # Today
+                elif time_diff <= 3:
+                    color= '#ff6600'  # Under 3 days
+                else:
+                    color= 'green'
+
                 taskFrame = tk.Frame(canvasFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
                 taskFrame.pack(fill="x")
 
                 taskFrame.task_id = task_id
+                taskFrame.task_data= json.dumps({
+                    'title': task.get('title'),
+                    'desc' : task.get('description'),
+                    'deadline' : f'{deadline}{" (Today)" if time_diff == 0 else ""}',
+                    'status' : task.get('status'),
+                    'overdue': time_diff < 0,
+                })
                 
                 tk.Label(taskFrame, text=f"Task #{task_id}", bg=panelBG, font=('Arial', 10, "bold italic underline")).pack(anchor="w")
                 tk.Label(taskFrame, text=task.get('title'), bg=panelBG, font=('Arial', 13)).pack(anchor="w")
-                tk.Label(taskFrame, text=f"Deadline: {task.get('deadline')}", bg=panelBG, font=('Arial', 9)).pack(anchor="w")
+                tk.Label(taskFrame, text=f"Deadline: {deadline}", bg=panelBG, fg = color, font=('Arial', 9)).pack(anchor="w")
+
 
                 bindings ={
                     '<MouseWheel>': lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"),
-                    '<Button-1>': lambda e,chat_widget = taskFrame: self.handleChatClick(chat_widget),
+                    '<Button-1>': lambda e,task_widget = taskFrame: self.handleTaskClick(task_widget),
                     '<Enter>': lambda e, item=taskFrame: self.chat_MouseEnter(item),
                     '<Leave>': lambda e, item=taskFrame: self.chat_MouseLeave(item),
                 }
