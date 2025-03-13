@@ -52,11 +52,46 @@ class teamSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'description', 'icon', 'members']
 
 
-# 
-class taskSerializer(serializers.ModelSerializer):
+
+class task_subTask_detailSerializer(serializers.ModelSerializer):
+    is_subtask = serializers.SerializerMethodField()
+    task_id = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Task  # Start with Task, we will override as needed.
+        fields = ['id', 'title', 'description', 'deadline', 'status', 'is_subtask', 'task_id']
+
+    def get_is_subtask(self, obj):
+        return isinstance(obj, SubTask)
+
+    def get_task_id(self, obj):
+        if isinstance(obj, SubTask):
+            return obj.task.id
+        return None
+
+    def to_representation(self, instance):
+        if isinstance(instance, SubTask):
+            self.Meta.model = SubTask
+        else:
+            self.Meta.model = Task
+        return super().to_representation(instance)
+
+class task_subTaskSerializer(serializers.ModelSerializer):
+    is_subtask = serializers.SerializerMethodField()
     class Meta:
         model = Task
-        fields = ['id', 'title', 'description', 'deadline', 'status']
+        fields = ['id', 'title','deadline', 'status', 'is_subtask']
+
+    def get_is_subtask(self, obj):
+        return isinstance(obj, SubTask)
+
+
+    def to_representation(self, instance):
+        if isinstance(instance, SubTask):
+            self.Meta.model = SubTask
+        else:
+            self.Meta.model = Task
+        return super().to_representation(instance)
 
 
 class messageSerializer(serializers.ModelSerializer):

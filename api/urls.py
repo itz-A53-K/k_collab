@@ -9,5 +9,6 @@ urlpatterns = [
     path('teams/', views.teamListCreate.as_view(), name='team_list_create'),
     path('teams/<uuid:team_id>/', views.teamContent.as_view(), name='team_content'),
     path('chat/messages/', views.messageListCreate.as_view(), name='message_list_create'),
-    path('tasks/', views.taskList.as_view(), name='task_list'),
+    path('tasks/', views.task_subTaskList.as_view(), name='task_list'),
+    path('tasks/<int:task_id>/', views.task_subTaskViewUpdate.as_view(), name='task_view_update'),
 ]
