@@ -16,14 +16,56 @@ from itertools import chain
 import json
 
 
-class taskList(generics.ListAPIView):
-    serializer_class = taskSerializer
+class task_subTaskViewUpdate(generics.RetrieveUpdateAPIView):
+    serializer_class= task_subTask_detailSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_url_kwarg  = 'task_id'
+    
+
+    def get_object(self):
+        pk = self.kwargs.get('task_id')        
+        is_subtask = self.request.query_params.get('isSubtask') or self.request.data.get('isSubtask')
+
+        try:
+            if is_subtask.lower() == "true":
+                return SubTask.objects.get(pk=pk)
+            else:
+                return Task.objects.get(pk=pk)
+        except SubTask.DoesNotExist or Task.DoesNotExist: 
+            return None
+    
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance is None:
+            return Response({"detail": "Task or Subtask not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+    
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        newStatus = request.data.get('newStatus')
+        if instance is None:
+            return Response({"detail": "Task or Subtask not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if newStatus:
+            instance.status = newStatus
+            instance.save()
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+        
+        
+
+class task_subTaskList(generics.ListAPIView):
+    serializer_class = task_subTaskSerializer
     permission_classes = [IsAuthenticated]
 
 
     def get_queryset(self):
         user = self.request.user
-        filter = self.request.data.get('filter', "in progress")
+        filter = self.request.query_params.get('filter', "to do") or self.request.data.get('filter', "to do")
+
         tasks = list(user.tasks.filter(status = filter))
         subtasks = list(user.subtasks.filter(status = filter))
         combined_list = list(chain(tasks, subtasks))
@@ -115,7 +157,7 @@ class teamContent(APIView):
 
         data = {
             'team': teamSerializer(team).data,
-            'tasks': taskSerializer(tasks, many=True).data if tasks else {"msg": "No task yet"},
+            'tasks': task_subTaskSerializer(tasks, many=True).data if tasks else {"msg": "No task yet"},
             'last message': messageSerializer(lastMsg).data if lastMsg else {"msg": "No message"},  #latest message 
         }
         return Response(data, status=status.HTTP_200_OK)
@@ -127,9 +169,16 @@ class chatList(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        chats = user.chats.annotate(
-            last_message_time=Max('messages__timestamp')  # Get the max timestamp
-        ).order_by('-last_message_time')
+        filter = self.request.query_params.get('filter', 'all').lower()
+        
+        if filter == 'groups':
+            chats = user.chats.filter(is_group_chat = True).annotate(
+                last_message_time=Max('messages__timestamp')  # Get the max timestamp
+            ).order_by('-last_message_time')
+        else:
+            chats = user.chats.annotate(
+                last_message_time=Max('messages__timestamp')
+            ).order_by('-last_message_time')
         
         return chats
     
@@ -143,7 +192,7 @@ class userList(generics.ListAPIView):
 class updateUserIP(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
+    def put(self, request):
         user = request.user
         ip_addr = request.META['REMOTE_ADDR']
         

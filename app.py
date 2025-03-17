@@ -54,7 +54,7 @@ class KCollabApp:
     def updateIP(self, token):
         try:
             headers = {"Authorization": f"Bearer {token}"}
-            resp = requests.post(self.baseURL + "update_ip/", headers=headers)
+            resp = requests.put(self.baseURL + "update_ip/", headers=headers)
 
             if resp.status_code == 200:
                 data = resp.json()
@@ -195,6 +195,7 @@ class KCollabApp:
             "filters": ["ALL", "GROUPS"],
             "api":{
                 "endpoint": "chats/",
+                "filter": "all",
                 "callback": "populateChat",
             },
             "defaultMsg": "Click on a chat to start messaging.",
@@ -211,9 +212,7 @@ class KCollabApp:
             "filters":["TO DO", "IN PROGRESS", "COMPLETED"],
             "api":{
                 "endpoint": "tasks/",
-                "data": {
-                    "filter": "to do"
-                },
+                "filter": "to do",
                 "callback": "populateTasks",
             },
             "defaultMsg": "Click on a task to view details.",
@@ -352,16 +351,14 @@ class KCollabApp:
 
 
             #populate messages
-            self.asyncGetRequest('chat/messages/', self.populateMsgs, data= {"chat_id": chat_id})
+            self.asyncGetRequest('chat/messages/', self.populateMsgs, params= {"chat_id": chat_id})
 
-    def handleTaskClick(self, task_widget):
-
-        task_id = task_widget.task_id
-        if self.openedTaskID != task_id:
+    def handleTaskClick(self, data, updateTask = False):
+        task_id = data.get('id')
+        if self.openedTaskID != task_id or updateTask :
 
             self.openedTaskID = task_id
 
-            data = json.loads(task_widget.task_data)
             status = data.get('status')
 
             taskDetailFrame = getattr(self,"task_rightPanelFrame")
@@ -388,7 +385,7 @@ class KCollabApp:
             f2.pack(anchor="w", fill="x")
 
             tk.Label(f2, text='Description:', bg=bgc, font=('Arial', 13, 'bold')).grid(row=0, column=0, sticky='nw')
-            descLabel = tk.Label(f2, text=data.get('desc').capitalize(), bg=bgc, font=('Arial', 13), justify="left")
+            descLabel = tk.Label(f2, text=data.get('description').capitalize(), bg=bgc, font=('Arial', 13), justify="left")
             descLabel.grid(row=0, column=1, sticky='nw')
 
 
@@ -423,7 +420,7 @@ class KCollabApp:
                 if status == 'to do': txt = "Start Task" 
                 elif status == 'in progress': txt ="Mark as Complete" 
 
-                btn = tk.Button(dataFrame, text=txt, bg=self.bgs['bg4'], **btnStyle)
+                btn = tk.Button(dataFrame, text=txt, bg=self.bgs['bg4'], command= lambda s = status, isSubtask = data.get('is_subtask'): self.updateTaskStatus(s, isSubtask) , **btnStyle)
 
             btn.pack(anchor="e", pady=10, padx=25, ipadx=10, ipady=5)
 
@@ -436,7 +433,6 @@ class KCollabApp:
 
             taskDetailFrame.bind("<Configure>", lambda event: setDescWraplength(event, descLabel))
 
-        
 
     def createTask(self):
         pass
@@ -461,43 +457,47 @@ class KCollabApp:
             self.sendP2PMessage(msgData)
             self.saveMsg2DB(msgData, msgTime = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"))
 
+
+
 #populate function
     def populateChat(self, chats):
-            panelBG = self.bgs["bg1_light"]
-            canvas = getattr(self,"chat_canvas")
-            canvasFrame = getattr(self,"chat_canvasFrame")
-        # chats = requests.get(self.baseURL + "chats/", headers={"Authorization": f"Bearer {self.authToken}"})
+        panelBG = self.bgs["bg1_light"]
+        canvas = getattr(self,"chat_canvas")
+        canvasFrame = getattr(self,"chat_canvasFrame")
         
-        # if chats.status_code != 200:
-        #     tk.Label(self.chatFrame, bg = panelBG, text = "Error Loading Chats", fg ="red").pack(padx=5, pady=10)
+        for widget in canvasFrame.winfo_children():
+            widget.destroy()
+        
+        
+        if len(chats) == 0:
+            tk.Label(canvasFrame, bg = panelBG, text = "Your Chatlist is Empty.", font=('Arial', 13)).pack(padx=5, pady=10)
 
-        #     #reload btn
-        #     tk.Button(self.chatFrame, text="Reload", command=lambda: self.reloadChats() ).pack(ipadx=5, ipady=5, pady=5, padx=5)
+            tk.Button(canvasFrame, text="Start a Chat", bg=self.bgs['bg4'], fg="#fff", font=('Arial', 11)).pack(ipadx=5, ipady=5, pady=5, padx=5)
+            return
 
-        # else:
-            for i in chats:
-                chat_id = i['id']
-                meta = i.get('metaData')
-                chat = tk.Frame(canvasFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
-                # chat.pack(ipady=10,ipadx=10, fill="x")
-                chat.pack(fill="x")
+        for i in chats:
+            chat_id = i['id']
+            meta = i.get('metaData')
+            chat = tk.Frame(canvasFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
+            # chat.pack(ipady=10,ipadx=10, fill="x")
+            chat.pack(fill="x")
 
-                chat.chat_id = chat_id
-                chat.meta = meta
-                chat.othersMembers = i.get('members')
-                
-                tk.Label(chat, text=meta['name'], bg=panelBG, font=('Arial', 11)).pack(anchor="w")
-                tk.Label(chat, text=meta['name'], bg=panelBG, font=('Arial', 8)).pack(anchor="w")
+            chat.chat_id = chat_id
+            chat.meta = meta
+            chat.othersMembers = i.get('members')
+            
+            tk.Label(chat, text=meta['name'], bg=panelBG, font=('Arial', 11)).pack(anchor="w")
+            tk.Label(chat, text=meta['name'], bg=panelBG, font=('Arial', 8)).pack(anchor="w")
 
-                chatBindings ={
-                    '<MouseWheel>': lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"),
-                    '<Button-1>': lambda e,chat_widget = chat: self.handleChatClick(chat_widget),
-                    '<Enter>': lambda e, item=chat: self.chat_MouseEnter(item),
-                    '<Leave>': lambda e, item=chat: self.chat_MouseLeave(item),
-                }
+            chatBindings ={
+                '<MouseWheel>': lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"),
+                '<Button-1>': lambda e,chat_widget = chat: self.handleChatClick(chat_widget),
+                '<Enter>': lambda e, item=chat: self.chat_MouseEnter(item),
+                '<Leave>': lambda e, item=chat: self.chat_MouseLeave(item),
+            }
 
-                for event, func in chatBindings.items():
-                    chat.bind(event, func)
+            for event, func in chatBindings.items():
+                chat.bind(event, func)
 
 
     def populateMsgs(self, messages):
@@ -515,60 +515,55 @@ class KCollabApp:
 
 
     def populateTasks(self, tasks):  
-            panelBG = self.bgs["bg1_light"]
-            canvas = getattr(self,"task_canvas")
-            canvasFrame = getattr(self,"task_canvasFrame")
-        # chats = requests.get(self.baseURL + "chats/", headers={"Authorization": f"Bearer {self.authToken}"})
+        panelBG = self.bgs["bg1_light"]
+        canvas = getattr(self,"task_canvas")
+        canvasFrame = getattr(self,"task_canvasFrame")
+
+        for widget in canvasFrame.winfo_children():
+            widget.destroy()
         
-        # if chats.status_code != 200:
-        #     tk.Label(self.chatFrame, bg = panelBG, text = "Error Loading Chats", fg ="red").pack(padx=5, pady=10)
+        if len(tasks) == 0:
+            tk.Label(canvasFrame, text="No Tasks Available.", bg=panelBG, font=('Arial', 13)).pack(anchor="center", pady=10)
+            return
+        
+        for task in tasks:
+            task_id = task['id']
+            deadline = task.get('deadline')
+            
+            today = datetime.date.today()
+            time_diff = (datetime.datetime.strptime(deadline, '%Y-%m-%d').date() - today).days
 
-        #     #reload btn
-        #     tk.Button(self.chatFrame, text="Reload", command=lambda: self.reloadChats() ).pack(ipadx=5, ipady=5, pady=5, padx=5)
+            if time_diff < 0:
+                color= '#8B0000'  # Overdue
+            elif time_diff == 0:
+                color= 'red'  # Today
+            elif time_diff <= 3:
+                color= '#ff6600'  # Under 3 days
+            else:
+                color= 'green'
 
-        # else:
-            for task in tasks:
-                task_id = task['id']
-                deadline = task.get('deadline')
-                
-                today = datetime.date.today()
-                time_diff = (datetime.datetime.strptime(deadline, '%Y-%m-%d').date() - today).days
-
-                if time_diff < 0:
-                    color= '#8B0000'  # Overdue
-                elif time_diff == 0:
-                    color= 'red'  # Today
-                elif time_diff <= 3:
-                    color= '#ff6600'  # Under 3 days
-                else:
-                    color= 'green'
-
-                taskFrame = tk.Frame(canvasFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
-                taskFrame.pack(fill="x")
-
-                taskFrame.task_id = task_id
-                taskFrame.task_data= json.dumps({
-                    'title': task.get('title'),
-                    'desc' : task.get('description'),
-                    'deadline' : f'{deadline}{" (Today)" if time_diff == 0 else ""}',
-                    'status' : task.get('status'),
-                    'overdue': time_diff < 0,
-                })
-                
-                tk.Label(taskFrame, text=f"Task #{task_id}", bg=panelBG, font=('Arial', 10, "bold italic underline")).pack(anchor="w")
-                tk.Label(taskFrame, text=task.get('title'), bg=panelBG, font=('Arial', 13)).pack(anchor="w")
-                tk.Label(taskFrame, text=f"Deadline: {deadline}", bg=panelBG, fg = color, font=('Arial', 9)).pack(anchor="w")
+            taskFrame = tk.Frame(canvasFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
+            taskFrame.pack(fill="x")
+            
+            tk.Label(taskFrame, text=f"Task #{task_id}", bg=panelBG, font=('Arial', 10, "bold italic underline")).pack(anchor="w")
+            tk.Label(taskFrame, text=task.get('title'), bg=panelBG, font=('Arial', 13)).pack(anchor="w")
+            tk.Label(taskFrame, text=f"Deadline: {deadline}", bg=panelBG, fg = color, font=('Arial', 9)).pack(anchor="w")
 
 
-                bindings ={
-                    '<MouseWheel>': lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"),
-                    '<Button-1>': lambda e,task_widget = taskFrame: self.handleTaskClick(task_widget),
-                    '<Enter>': lambda e, item=taskFrame: self.chat_MouseEnter(item),
-                    '<Leave>': lambda e, item=taskFrame: self.chat_MouseLeave(item),
-                }
+            bindings ={
+                '<MouseWheel>': lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"),
+                '<Button-1>': lambda e,t_id = task_id, isSubtask = task.get('is_subtask'): 
+                                    self.asyncGetRequest(
+                                        endpoint=f'tasks/{t_id}',
+                                        callback=self.handleTaskClick,
+                                        params={"isSubtask": isSubtask}
+                                    ),
+                '<Enter>': lambda e, item=taskFrame: self.chat_MouseEnter(item),
+                '<Leave>': lambda e, item=taskFrame: self.chat_MouseLeave(item),
+            }
 
-                for event, func in bindings.items():
-                    taskFrame.bind(event, func)   
+            for event, func in bindings.items():
+                taskFrame.bind(event, func)   
     
     
 # helper events
@@ -674,17 +669,18 @@ class KCollabApp:
         update_message_label_wraplength()
     
 
-    def asyncGetRequest(self, endpoint:str, callback, data = None):
+    def asyncGetRequest(self, endpoint: str, callback, params=None):
         def run():
-            header =  {"Authorization": f"Bearer {self.authToken}"}
+            header = {"Authorization": f"Bearer {self.authToken}"}
+
             try:
-                resp = requests.get(self.baseURL + endpoint, headers = header, data = data)
+                resp = requests.get(self.baseURL + endpoint, headers=header, params=params)
                 if resp.status_code == 200:
                     respData = resp.json()
-                    root.after(0, lambda: callback(respData))
+                    self.root.after(0, lambda: callback(respData))
             except requests.exceptions.RequestException as e:
                 print("Request error:", e)
-        
+
         threading.Thread(target=run, daemon=True).start()
 
 
@@ -777,6 +773,11 @@ class KCollabApp:
 
     def layout1(self, frame, content):
         content = json.loads(content)
+        endpoint = content.get("api").get("endpoint")
+        callback_name = content.get("api").get("callback")
+        filter_val = content.get("api").get("filter")
+
+
         panelBG = self.bgs["bg1_light"]
 
         leftPanalFrame = tk.Frame(frame, bg=panelBG, width=350, padx=5, pady=5)
@@ -801,7 +802,10 @@ class KCollabApp:
         }
         filterBtns = []
         for filter in content.get("filters"):
-            btn = tk.Button(filterFrame, text=filter, **filterBtnStyle)
+            btn = tk.Button(
+                filterFrame, 
+                text=filter, 
+                command= lambda f=filter: self._update_L1_leftPanel(endpoint, callback_name, filterBtns, f) , **filterBtnStyle)
             btn.pack(side=tk.LEFT, padx=5)
             filterBtns.append(btn)
             
@@ -851,16 +855,8 @@ class KCollabApp:
             lambda e: scrollbar.pack_forget()
         )
 
-        # Handle asyncGetRequest
-        endpoint = content.get("api").get("endpoint")
-        callback_name = content.get("api").get("callback")
-        data = content.get("api").get("data")
-
-        if callback_name and endpoint:
-            callback_func = getattr(self, callback_name, None) 
-
-            if callable(callback_func):
-                self.asyncGetRequest(endpoint, callback_func, data)
+        # populate items in laft panel
+        self._update_L1_leftPanel(endpoint, callback_name, filterBtns, filter_val)
 
         rightPanelFrame = tk.Frame(frame, bg="white", padx=5, pady=5)
         rightPanelFrame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -877,10 +873,63 @@ class KCollabApp:
         setattr(self, f"{prefix}_canvas", canvas)
         setattr(self, f"{prefix}_rightPanelFrame", rightPanelFrame)
         setattr(self, f"{prefix}_canvasFrame", canvasFrame)
+        setattr(self, f"{prefix}_filterBtns", filterBtns)
 
 
+#update functions
+
+    def updateTaskStatus(self, statusTxt, isSubtask):
+        statusTxt = statusTxt.lower()
+        task_id = self.openedTaskID
+
+        if statusTxt == "to do":
+            newStatus = "in progress"
+        elif statusTxt == "in progress":
+            newStatus = "completed"
+        else:
+            return
+        
+        data = {
+            "newStatus": newStatus,
+            "isSubtask": isSubtask,
+        }
+
+        resp = requests.put(f"{self.baseURL}tasks/{task_id}/", headers= {"Authorization": f"Bearer {self.authToken}"}, data = data)
+
+        if resp.status_code == 200:
+            self.handleTaskClick(resp.json(), updateTask = True)
+
+            filterBtns = getattr(self, f"task_filterBtns")
+
+            for btn in filterBtns:
+                if btn.cget('bg') == self.bgs["bg5"]:
+                    filter_val = btn.cget("text")
+            
+            self._update_L1_leftPanel("tasks/", "populateTasks", filterBtns, filter_val.lower())
+        else:
+            print("Failed to update task status")
+        
 
         
+
+    def _update_L1_leftPanel(self, endpoint, callback_name, filterBtns, filter_val = None):
+
+        if filter_val is not None:
+            filter_val = filter_val.lower()
+            params = {
+                "filter": filter_val
+            }
+            if callback_name and endpoint:
+                callback_func = getattr(self, callback_name, None) 
+
+                if callable(callback_func):
+                    self.asyncGetRequest(endpoint, callback_func, params)
+            
+            for btn in filterBtns:
+                if btn.cget("text").lower() == filter_val:
+                    btn.config(bg=self.bgs["bg5"])
+                else:
+                    btn.config(bg=self.bgs["bg4"])
 
 
 
