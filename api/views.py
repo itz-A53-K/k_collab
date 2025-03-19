@@ -77,30 +77,17 @@ class task_subTaskList(generics.ListAPIView):
 
 
 
-class messageListCreate(APIView):
+class messageCreate(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
-
-    def get(self, request, *args, **kwargs):
-        chat_id = request.query_params.get('chat_id') or request.data.get('chat_id')
-        if not chat_id:
-            return Response({"error": "chat_id is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        chat = get_object_or_404(Chat, id=chat_id)
-        messages = chat.messages.all().order_by('timestamp') 
-        msgSerializer = messageSerializer(messages, many=True)
-
-        return Response(
-            msgSerializer.data, 
-            status=status.HTTP_200_OK
-        )
     
-    def post(self, request, *args, **kwargs):
+    def create(self, request, *args, **kwargs):
         sender = self.request.user
-        # sender = get_object_or_404(User, id = 2)
-        chat_id = request.data.get('chat_id')
-        receiver_id = request.data.get('receiver_id') #required if not a group chat
-        content = request.data.get('content')
-        timestamp = request.data.get('timestamp', datetime.now())
+        data = request.data
+        chat_id = data.get('chat_id')
+        receiver_id = data.get('receiver_id') #required if not a group chat
+        content = data.get('content')
+        timestamp = data.get('timestamp', datetime.now())
+        print(receiver_id)
 
         if not content:
             return Response({"error": "Content cannot be empty"}, status=status.HTTP_400_BAD_REQUEST)
@@ -130,7 +117,10 @@ class messageListCreate(APIView):
         
         message = Message.objects.create(sender=sender, chat=chat, content=content, timestamp = timestamp)
         serializer = messageSerializer(message)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(
+            serializer.data, 
+            status=status.HTTP_201_CREATED
+        )
                 
 
 
@@ -161,6 +151,31 @@ class teamContent(APIView):
             'last message': messageSerializer(lastMsg).data if lastMsg else {"msg": "No message"},  #latest message 
         }
         return Response(data, status=status.HTTP_200_OK)
+
+
+class chatDetail(generics.RetrieveAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = chatSerializer
+
+    def get_object(self):
+        chat_id = self.kwargs.get('chat_id')
+        return get_object_or_404(Chat, id=chat_id)
+
+    def retrieve(self, request, *args, **kwargs):
+        chat = self.get_object()
+        chatSerializer = self.get_serializer(chat)
+
+        messages = chat.messages.all().order_by('timestamp')
+        msgSerializer = messageSerializer(messages, many=True)
+
+        return Response(
+            {
+                'chat': chatSerializer.data,
+                'messages': msgSerializer.data
+            },
+            status = status.HTTP_200_OK
+        )
+
 
 
 class chatList(generics.ListAPIView):
@@ -207,7 +222,14 @@ class updateUserIP(APIView):
         user.port = port
         user.save()
 
-        return Response({"message": "IP updated", "uID": user.id, "uName": user.name, 'ip': ip_addr, "port": port}, status= status.HTTP_200_OK)
+        return Response({
+            "message": "IP updated", 
+            "uID": user.id, 
+            "uName": user.name,
+            "isAdmin": user.isAdmin,
+            'ip': ip_addr, 
+            "port": port
+        }, status= status.HTTP_200_OK)
 
 
 
@@ -241,11 +263,6 @@ class loginView(APIView):
             return Response({
                 'message': 'Login successful',
                 'authToken': token.key,
-                'user':{
-                    'id': user.id,
-                    'name': user.name,
-                    'email': user.email,
-                }
             }, status=status.HTTP_200_OK)
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 

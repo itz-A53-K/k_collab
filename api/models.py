@@ -25,6 +25,8 @@ class User(AbstractUser):
 
     ip_addr = models.GenericIPAddressField(blank=True, null= True)
     port = models.IntegerField(blank= True, null= True)
+    
+    isAdmin = models.BooleanField(default=False)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
