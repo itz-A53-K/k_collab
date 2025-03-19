@@ -61,8 +61,10 @@ class KCollabApp:
                 self.authToken = token
                 self.user_id = data.get("uID")
                 self.user_name = data.get("uName")
+                self.isAdmin = data.get("isAdmin")
                 self.hostIP = data.get("ip")
                 self.hostPort = data.get("port")
+
 
                 return True
             else:
@@ -178,6 +180,31 @@ class KCollabApp:
     def initTasks(self):
         self.tasks_frame.pack(fill=tk.BOTH, expand=True)
 
+    def initAddTaskForm(self):
+
+        formFrame = tk.Frame(self.mainFrame, bg="red", padx=30, pady=30, bd=3, relief="flat")
+        formFrame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        closeBtn = tk.Button(formFrame, text="X", font=('Arial', 12, 'bold'), bg="#fff", fg="black", bd=0, command= lambda: formFrame.destroy())
+        closeBtn.place(anchor=tk.CENTER, relx = 1.5, rely = 0)
+
+        tk.Label(formFrame, text="Add Task", font=('Arial', 20, 'bold'), bg=formFrame.cget("bg"), fg="#222").pack(pady=20)
+
+
+        inputStyle = {"font": ('Arial', 12), "width": 40, "bg": self.bgs["bg1_light"], "bd": 1, "relief": "groove",}
+
+        titleInput = tk.Entry(formFrame, **inputStyle)
+        titleInput.pack(pady=5, ipadx=5, ipady=5)
+        
+
+        passwordLabel = tk.Label(self.loginFrame, text="Enter Password:", font=('Arial', 13, 'bold'), bg=self.loginFrame.cget("bg"), fg="#222")
+        passwordLabel.pack(pady=5, anchor="w")
+
+        self.passwordInput = tk.Entry(self.loginFrame, show = "*", **inputStyle)
+        self.passwordInput.pack(pady=5, ipadx=5, ipady=5)
+
+        self.loginBtn = tk.Button(self.loginFrame, text="LOGIN", font=('Arial', 13), bg=self.bgs["bg1"], fg="white", pady=10, bd=0, width= 25, command=self.handleLoginClick)
+        self.loginBtn.pack(pady=20)
+
 
 #UI create events
 
@@ -272,10 +299,13 @@ class KCollabApp:
         elif section.lower() == "tasks":
             self.initTasks()
         
-    def handleChatClick(self, chat_widget):
-        chat_id = chat_widget.chat_id
+    def handleChatClick(self, data):
+
+        chat_id = data.get('chat')['id']
         if self.openedChatID != chat_id:
-            print("chat_id: ", chat_id)
+
+            chatMeta = data.get('chat').get('metaData')
+            messages = data.get('messages')
 
             if hasattr(self, "activeChat"): 
                 # Remove the previous active chat's bgcolor
@@ -283,13 +313,11 @@ class KCollabApp:
                 [w.config(bg=self.bgs["bg1_light"]) for w in self.activeChat.winfo_children()]
 
             self.openedChatID = chat_id
-            self.currentPeers = chat_widget.othersMembers
-            metaData = chat_widget.meta
             msgPanelFrame = getattr(self,"chat_rightPanelFrame")
 
-            chat_widget.config(bg=self.bgs["bg1_mid2"]) 
-            [w.config(bg=self.bgs["bg1_mid2"]) for w in chat_widget.winfo_children()]
-            self.activeChat = chat_widget 
+            # chat_widget.config(bg=self.bgs["bg1_mid2"]) 
+            # [w.config(bg=self.bgs["bg1_mid2"]) for w in chat_widget.winfo_children()]
+            # self.activeChat = chat_widget 
 
 
             for widget in msgPanelFrame.winfo_children():
@@ -300,7 +328,7 @@ class KCollabApp:
             msgP_HeaderFrame = tk.Frame(msgPanelFrame, bg=self.bgs["bg1_light"], padx=5, pady=10)
             msgP_HeaderFrame.pack(fill="x", side=tk.TOP)
 
-            tk.Label(msgP_HeaderFrame, text=metaData['name'], bg=msgP_HeaderFrame.cget('bg'), font=('Arial', 11, 'bold')).pack(anchor="w")
+            tk.Label(msgP_HeaderFrame, text=chatMeta.get('name'), bg=msgP_HeaderFrame.cget('bg'), font=('Arial', 11, 'bold')).pack(anchor="w")
 
             #msg canvas
             self.msgCanvas = tk.Canvas(msgPanelFrame)
@@ -351,7 +379,7 @@ class KCollabApp:
 
 
             #populate messages
-            self.asyncGetRequest('chat/messages/', self.populateMsgs, params= {"chat_id": chat_id})
+            self.populateMsgs(messages)
 
     def handleTaskClick(self, data, updateTask = False):
         task_id = data.get('id')
@@ -475,32 +503,31 @@ class KCollabApp:
             tk.Button(canvasFrame, text="Start a Chat", bg=self.bgs['bg4'], fg="#fff", font=('Arial', 11)).pack(ipadx=5, ipady=5, pady=5, padx=5)
             return
 
-        for i in chats:
-            chat_id = i['id']
-            meta = i.get('metaData')
-            chat = tk.Frame(canvasFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
-            # chat.pack(ipady=10,ipadx=10, fill="x")
-            chat.pack(fill="x")
-
-            chat.chat_id = chat_id
-            chat.meta = meta
-            chat.othersMembers = i.get('members')
+        for chat in chats:
+            chat_id = chat['id']
+            meta = chat.get('metaData')
+            chatFrame = tk.Frame(canvasFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
+            chatFrame.pack(fill="x")
             
-            tk.Label(chat, text=meta['name'], bg=panelBG, font=('Arial', 11)).pack(anchor="w")
-            tk.Label(chat, text=meta['name'], bg=panelBG, font=('Arial', 8)).pack(anchor="w")
+            tk.Label(chatFrame, text=meta['name'], bg=panelBG, font=('Arial', 11)).pack(anchor="w")
+            tk.Label(chatFrame, text=meta['name'], bg=panelBG, font=('Arial', 8)).pack(anchor="w")
 
             chatBindings ={
                 '<MouseWheel>': lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"),
-                '<Button-1>': lambda e,chat_widget = chat: self.handleChatClick(chat_widget),
-                '<Enter>': lambda e, item=chat: self.chat_MouseEnter(item),
-                '<Leave>': lambda e, item=chat: self.chat_MouseLeave(item),
+                '<Enter>': lambda e, item=chatFrame: self.chat_MouseEnter(item),
+                '<Leave>': lambda e, item=chatFrame: self.chat_MouseLeave(item),
+                '<Button-1>': lambda e,c_id = chat_id: 
+                            self.asyncGetRequest(
+                                endpoint = f'chats/{c_id}/',
+                                callback = self.handleChatClick
+                            ),
             }
 
             for event, func in chatBindings.items():
-                chat.bind(event, func)
+                chatFrame.bind(event, func)
 
 
-    def populateMsgs(self, messages):
+    def populateMsgs(self, messages):        
         for msg in messages :
             sender_id = msg['sender']['id']
 
@@ -512,6 +539,7 @@ class KCollabApp:
                 align = 'right'
 
             self.add_message({"sender":sender, "msg":msg['content'], "time": msg['timestamp']}, align)
+
 
 
     def populateTasks(self, tasks):  
@@ -742,30 +770,36 @@ class KCollabApp:
         clientSocket.close()
 
     def sendP2PMessage(self, data):
-        jsonMsg = json.dumps(data)
-        
-        # with self.connections_lock:
-        for peer in self.currentPeers:
-            ip = peer['ip_addr']
-            port = peer['port']
-            try:
-                clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                clientSocket.connect((ip,port))
-                clientSocket.sendall(jsonMsg.encode())
-                clientSocket.close()
-            except Exception as e:
-                print(f"Failed to send message", e)
+        def run():
+            jsonMsg = json.dumps(data)
+            
+            # with self.connections_lock:
+            for peer in self.currentPeers:
+                ip = peer['ip_addr']
+                port = peer['port']
+                try:
+                    clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    clientSocket.connect((ip,port))
+                    clientSocket.sendall(jsonMsg.encode())
+                    clientSocket.close()
+                except Exception as e:
+                    print(f"Failed to send message", e)
+        threading.Thread(target=run, daemon=True).start()
 
 #DB write functions
 
     def saveMsg2DB(self, msgData, msgTime):
-        data = {
-            "chat_id" : self.openedChatID,
-            "content" : msgData.get("msg"),
-            "timestamp" : msgTime
-        }
-        resp = requests.post(f"{self.baseURL}chat/messages/", headers= {"Authorization": f"Bearer {self.authToken}"}, data = data)
-        print("msg saved to DB")
+        def run():
+            # need to redefine chat_id extract whan new chat is created, for new individual chat there will be no prior chat_id, so insteed chat id we need to send receiver_id in data, and new chat will automatically be created in DB
+            data = {
+                "chat_id" : self.openedChatID,
+                "content" : msgData.get("msg"),
+                "timestamp" : msgTime
+            }
+            resp = requests.post(f"{self.baseURL}message/c/", headers= {"Authorization": f"Bearer {self.authToken}"}, data = data)
+            print("msg saved to DB")
+        
+        threading.Thread(target=run, daemon=True).start()
 
 
 #UI layout
@@ -777,6 +811,8 @@ class KCollabApp:
         callback_name = content.get("api").get("callback")
         filter_val = content.get("api").get("filter")
 
+        titleTxt = content.get("title")
+
 
         panelBG = self.bgs["bg1_light"]
 
@@ -784,7 +820,14 @@ class KCollabApp:
         leftPanalFrame.pack(side=tk.LEFT, fill=tk.Y)
         leftPanalFrame.pack_propagate(False)
 
-        title = tk.Label(leftPanalFrame, text=content.get("title"), bg=panelBG, font=("Arial", 16, "bold")).pack(side=tk.TOP, anchor=tk.W, padx=10)
+        fr = tk.Frame(leftPanalFrame, bg=panelBG)
+        fr.pack(side=tk.TOP, anchor=tk.W, fill=tk.X)
+        title = tk.Label(fr, text= titleTxt, bg=panelBG, font=("Arial", 16, "bold")).pack(side=tk.LEFT, anchor=tk.W, padx=10)
+
+        if titleTxt.lower() in ["task", "tasks"] and self.isAdmin == True:
+            btn = tk.Button(fr, text="Add Task", bg=panelBG, font=("Arial", 12, "bold"), command = self.initAddTaskForm)
+            btn.pack(side=tk.RIGHT, anchor=tk.W, ipadx= 2, ipady = 2)
+
 
         filterFrame = tk.Frame(leftPanalFrame, bg=panelBG, pady=5, padx=5)
         filterFrame.pack(side=tk.TOP, anchor=tk.W, fill=tk.X, pady=10)
@@ -926,6 +969,7 @@ class KCollabApp:
                     self.asyncGetRequest(endpoint, callback_func, params)
             
             for btn in filterBtns:
+                # update active filter btn
                 if btn.cget("text").lower() == filter_val:
                     btn.config(bg=self.bgs["bg5"])
                 else:
