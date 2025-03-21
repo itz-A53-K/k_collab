@@ -77,50 +77,51 @@ class task_subTaskList(generics.ListAPIView):
 
 
 
-class messageCreate(generics.CreateAPIView):
-    permission_classes = [IsAuthenticated]
+# class messageCreate(generics.CreateAPIView):
+#     permission_classes = [IsAuthenticated]
+#     serializer_class = messageSerializer
     
-    def create(self, request, *args, **kwargs):
-        sender = self.request.user
-        data = request.data
-        chat_id = data.get('chat_id')
-        receiver_id = data.get('receiver_id') #required if not a group chat
-        content = data.get('content')
-        timestamp = data.get('timestamp', datetime.now())
-        print(receiver_id)
+#     def create(self, request, *args, **kwargs):
+#         data = request.data
+#         sender_id = data.get('sender_id')
+#         chat_id = data.get('chat_id')
+#         receiver_id = data.get('receiver_id') #required if new individual chat
+#         content = data.get('content')
+#         timestamp = data.get('timestamp', datetime.now())
 
-        if not content:
-            return Response({"error": "Content cannot be empty"}, status=status.HTTP_400_BAD_REQUEST)
+#         if not content:
+#             return Response({"error": "Content cannot be empty"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if chat_id:
-            chat = get_object_or_404(Chat, id=chat_id)            
-        else:
-            if not receiver_id:
-                return Response({"error": "receiver_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+#         if chat_id:
+#             chat = get_object_or_404(Chat, id=chat_id) 
+#         else:
+#             if not receiver_id:
+#                 return Response({"error": "receiver_id is required"}, status=status.HTTP_400_BAD_REQUEST)
             
-            receiver = User.objects.filter(id=receiver_id).first()
-            if not receiver:
-                return Response({"error": "Invalid receiver_id."}, status=status.HTTP_404_NOT_FOUND)
+#             receiver = User.objects.filter(id=receiver_id).first()
+#             if not receiver:
+#                 return Response({"error": "Invalid receiver_id."}, status=status.HTTP_404_NOT_FOUND)
             
-            if sender == receiver:
-                return Response({"error": "Sender and receiver cannot be the same"}, status=status.HTTP_400_BAD_REQUEST)
+#             sender = User.objects.filter(id=sender_id).first()
+#             if sender == receiver:
+#                 return Response({"error": "Sender and receiver cannot be the same"}, status=status.HTTP_400_BAD_REQUEST)
             
-            members = [sender, receiver] 
-            chat = Chat.objects.filter(members__in=members, is_group_chat = False).first()
-            if not chat:
-                chat = Chat.objects.create(is_group_chat=False)
-                chat.members.set(members)
-                chat.save()
+#             members = [sender, receiver] 
+#             chat = Chat.objects.filter(members__in=members, is_group_chat = False).first()
+#             if not chat:
+#                 chat = Chat.objects.create(is_group_chat=False)
+#                 chat.members.set(members)
+#                 chat.save()
 
-        if sender not in chat.members.all():
-            return Response({"error": "You are not a member of this chat"}, status=status.HTTP_403_FORBIDDEN)
+#         if sender not in chat.members.all():
+#             return Response({"error": "You are not a member of this chat"}, status=status.HTTP_403_FORBIDDEN)
         
-        message = Message.objects.create(sender=sender, chat=chat, content=content, timestamp = timestamp)
-        serializer = messageSerializer(message)
-        return Response(
-            serializer.data, 
-            status=status.HTTP_201_CREATED
-        )
+#         message = Message.objects.create(sender=sender, chat=chat, content=content, timestamp = timestamp)
+#         serializer = messageSerializer(message)
+#         return Response(
+#             serializer.data, 
+#             status=status.HTTP_201_CREATED
+#         )
                 
 
 

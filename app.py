@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 from django.utils import timezone
-import socket, threading, requests, json, re, os, time, datetime, inspect  
+import socket, threading, requests, json, re, os, time, datetime, asyncio, websockets
 
 
 
@@ -31,10 +31,15 @@ class KCollabApp:
 
         self.openedTaskID = None
         self.openedChatID = None
+
+        self.chatOrder = []
+        self.chatData = {}
+        self.taskStack = []
         
 
         # self.isMsgUI_init = False
         self.baseURL = "http://127.0.0.1:8000/api/"
+        self.ws_url = "ws://127.0.0.1:8000/ws/chat/"
 
 
         self.mainFrame = tk.Frame(self.root, bg= self.bgs["bg6"])
@@ -46,7 +51,7 @@ class KCollabApp:
         token = self.load_token()
         if token and self.updateIP(token):
             self.initMainUI()
-            self.startP2PServer()
+            # self.startP2PServer()
         else:
             self.initLoginUI()
 
@@ -74,9 +79,115 @@ class KCollabApp:
 
         return False
 
+    # def connectToWs(self):
+    #     """Connects to the WebSocket server in a separate thread."""
+
+    #     def runLoop():
+    #         try:
+    #             asyncio.run(self.websocket_handler())
+    #         except Exception as e:
+    #             print(f"WebSocket error: {e}")
+        
+    #     wsThread = threading.Thread(target=runLoop, daemon=True)
+    #     wsThread.start()
+
+    def connectToWs(self):
+        """Connects to the WebSocket server in a separate thread."""
+
+        def runLoop():
+            try:
+                asyncio.run(ws_handler())
+            except Exception as e:
+                print(f"WebSocket error: {e}")
+
+        async def ws_handler():
+            try:
+                async with websockets.connect(self.ws_url) as ws:
+                    self.ws = ws
+                    print("WebSocket connection established.")
+
+                    initialData = json.dumps({
+                        'user_id': self.user_id,
+                        'msg': "initial"
+                    })
+
+                    await self.ws.send(initialData)
+                    await self.receiveMessage()
+            
+            except ConnectionRefusedError:
+                print(f"WebSocket connection failed: {e}")
+                self.ws = None
+            except Exception as e:
+                print(f"WebSocket error: {e}")
+                self.ws = None
+        
+        wsThread = threading.Thread(target=runLoop, daemon=True)
+        wsThread.start()
+
+
+    async def receiveMessage(self):
+        try:
+            while True:
+                msg = await self.ws.recv()
+                self.process_message(msg)
+        except websockets.exceptions.ConnectionClosedOK:
+            print("WebSocket connection closed.")
+        except Exception as e:
+            print("Error receiving message:", e)
+
+
+    def process_message(self, msg):
+        """Process incoming WebSocket messages."""
+        try:
+            data = json.loads(msg)
+            print("Received new message")
+
+            if data:
+
+                chat_data = data.get('chat_data')
+                msg_data = data.get('msg_data')
+
+                self._updateChatStack(chat_data)
+
+                if chat_data['id'] == self.openedChatID:
+                    self.addMessage2Canvas(msg_data)
+                    self.msgCanvas.update_idletasks()
+                    self.msgCanvas.yview_moveto(1)
+                else:
+                    # Notify user of new message ; like show a notification icon on respective chat and populateChat where latast msg chat is in top
+
+                    pass
+
+        except json.JSONDecodeError:
+            print(f"Invalid JSON received: {msg}")
+        except Exception as e:
+            print(f"Error processing message: {e}")
+
+    def send_message(self):
+        """Sends a message to the server via WebSocket."""
+        msgInp = self.msgInput.get()
+        if msgInp and self.ws and self.openedChatID:
+            try:
+                msgData = {
+                    "msg": msgInp,
+                    "chat_id": str(self.openedChatID),
+                    "user_id": str(self.user_id),  # Send user ID
+                }
+                asyncio.run(self.ws.send(json.dumps(msgData))) # Send message via WebSocket
+                self.msgInput.delete(0, tk.END)
+
+            except websockets.exceptions.ConnectionClosedOK:
+                print("WebSocket connection closed.")
+                self.ws = None
+            except Exception as e:
+                print(f"Error sending message: {e}")
+
+
 
 # initialization events
     def initMainUI(self):
+
+        self.connectToWs()
 
         # Navbar
         self.navbar = tk.Frame(self.mainFrame, width=50, bg=self.bgs["bg1"])
@@ -223,7 +334,7 @@ class KCollabApp:
             "api":{
                 "endpoint": "chats/",
                 "filter": "all",
-                "callback": "populateChat",
+                "callback": "_updateChatStack",
             },
             "defaultMsg": "Click on a chat to start messaging.",
         }
@@ -374,12 +485,13 @@ class KCollabApp:
                 fg="#fff", 
                 font=('Arial', 12),
                 cursor= 'hand2',
-                command= self.sendMessage
+                command= self.send_message
             ).pack(side=tk.RIGHT, padx=3, pady=5)
 
 
             #populate messages
-            self.populateMsgs(messages)
+            for msg in messages:
+                self.addMessage2Canvas(msg)
 
     def handleTaskClick(self, data, updateTask = False):
         task_id = data.get('id')
@@ -448,7 +560,7 @@ class KCollabApp:
                 if status == 'to do': txt = "Start Task" 
                 elif status == 'in progress': txt ="Mark as Complete" 
 
-                btn = tk.Button(dataFrame, text=txt, bg=self.bgs['bg4'], command= lambda s = status, isSubtask = data.get('is_subtask'): self.updateTaskStatus(s, isSubtask) , **btnStyle)
+                btn = tk.Button(dataFrame, text=txt, bg=self.bgs['bg4'], command= lambda s = status, isSubtask = data.get('is_subtask'): self._updateTaskStatus(s, isSubtask) , **btnStyle)
 
             btn.pack(anchor="e", pady=10, padx=25, ipadx=10, ipady=5)
 
@@ -466,29 +578,10 @@ class KCollabApp:
         pass
 
 
-            
-    def sendMessage(self):
-        msgInp = self.msgInput.get()
-        if msgInp != "":
-            msgData = {
-                "sender": self.user_name, 
-                "msg": msgInp, 
-                "time": datetime.datetime.now().strftime("%d-%m-%y %I:%M %p")
-            }
-
-            self.add_message(msgData, "right")
-
-            self.msgInput.delete(0, tk.END)
-            self.msgCanvas.update_idletasks()
-            self.msgCanvas.yview_moveto(1)
-            
-            self.sendP2PMessage(msgData)
-            self.saveMsg2DB(msgData, msgTime = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"))
-
 
 
 #populate function
-    def populateChat(self, chats):
+    def populateChat(self):
         panelBG = self.bgs["bg1_light"]
         canvas = getattr(self,"chat_canvas")
         canvasFrame = getattr(self,"chat_canvasFrame")
@@ -497,20 +590,32 @@ class KCollabApp:
             widget.destroy()
         
         
-        if len(chats) == 0:
+        if not self.chatOrder:
             tk.Label(canvasFrame, bg = panelBG, text = "Your Chatlist is Empty.", font=('Arial', 13)).pack(padx=5, pady=10)
 
             tk.Button(canvasFrame, text="Start a Chat", bg=self.bgs['bg4'], fg="#fff", font=('Arial', 11)).pack(ipadx=5, ipady=5, pady=5, padx=5)
             return
 
-        for chat in chats:
-            chat_id = chat['id']
+        for chat_id in self.chatOrder:
+            chat = self.chatData[chat_id]
             meta = chat.get('metaData')
+            lastMsg = chat.get('last_msg')
+            msgTxt = ""
+            
             chatFrame = tk.Frame(canvasFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
             chatFrame.pack(fill="x")
             
-            tk.Label(chatFrame, text=meta['name'], bg=panelBG, font=('Arial', 11)).pack(anchor="w")
-            tk.Label(chatFrame, text=meta['name'], bg=panelBG, font=('Arial', 8)).pack(anchor="w")
+            fr = tk.Frame(chatFrame, bg=panelBG)
+            fr.pack(fill="x")
+            name = tk.Label(fr, text=meta['name'], bg=panelBG, font=('Arial', 11))
+            name.pack(anchor="w", side="left")
+            timestamp = tk.Label(fr, text=lastMsg.get('timestamp'), bg=panelBG, font=('Arial', 8))
+            timestamp.pack(anchor="w", side="right")
+
+            if 'sender' in lastMsg:
+                msgTxt = f"{lastMsg.get('sender')['name']}: {lastMsg.get('content')}" if chat['is_group_chat'] else lastMsg.get('content')
+            msg = tk.Label(chatFrame, text= msgTxt, bg=panelBG, font=('Arial', 9))
+            msg.pack(anchor="w")
 
             chatBindings ={
                 '<MouseWheel>': lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"),
@@ -525,6 +630,10 @@ class KCollabApp:
 
             for event, func in chatBindings.items():
                 chatFrame.bind(event, func)
+                fr.bind(event, func)
+                name.bind(event, func)
+                timestamp.bind(event, func)
+                msg.bind(event, func)
 
 
     def populateMsgs(self, messages):        
@@ -538,7 +647,7 @@ class KCollabApp:
                 sender ='You'
                 align = 'right'
 
-            self.add_message({"sender":sender, "msg":msg['content'], "time": msg['timestamp']}, align)
+            self.addMessage2Canvas(msg)
 
 
 
@@ -638,23 +747,38 @@ class KCollabApp:
         self.is_navbar_expanded = not self.is_navbar_expanded
 
     def chat_MouseEnter(self, chat_widget):
+        def add_config(widget):
+            widget.config(bg=self.bgs["bg1_mid"])
+            for w in widget.winfo_children():
+                add_config(w)
+
         if not hasattr(self, "activeChat") or chat_widget != self.activeChat:
-            chat_widget.config(bg=self.bgs["bg1_mid"])
-            [w.config(bg=self.bgs["bg1_mid"])  for w in chat_widget.winfo_children()]
+            add_config(chat_widget)
 
     def chat_MouseLeave(self, chat_widget):
+        def remove_config(widget):
+            widget.config(bg=self.bgs["bg1_light"])
+            for w in widget.winfo_children():
+                remove_config(w)
+
         if not hasattr(self, "activeChat") or chat_widget != self.activeChat:
-            chat_widget.config(bg=self.bgs["bg1_light"])
-            [w.config(bg=self.bgs["bg1_light"])  for w in chat_widget.winfo_children()]
+            remove_config(chat_widget)
 
+    def addMessage2Canvas(self, msgData):
+        sender_id = msgData['sender']['id']
 
-    def add_message(self, data, align):
-        sender = "You" if data['sender'] == self.user_name else data['sender']
-        msg = tk.Frame(self.msgsFrame, bg="white")
-        msg.pack(pady=5, padx=10, anchor="e" if align == "right" else "w")
+        if sender_id != self.user_id:
+            sender = msgData['sender']['name'] 
+            align = 'left'
+        else:
+            sender ='You'
+            align = 'right'
+            
+        msgFrame = tk.Frame(self.msgsFrame, bg="white")
+        msgFrame.pack(pady=5, padx=10, anchor="e" if align == "right" else "w")
 
         bubble_frame = tk.Frame(
-            msg,
+            msgFrame,
             bg="#dcf8c6" if align == "right" else "#e6e6e6",
             bd=1,
             relief="solid"
@@ -666,15 +790,15 @@ class KCollabApp:
 
         message_label = tk.Label(
             bubble_frame, 
-            text=data["msg"], 
-            bg=bubble_frame.cget("bg"), 
-            font=('Arial', 11), 
-            padx=5, 
-            justify="left"
+            text= msgData["content"], 
+            bg= bubble_frame.cget("bg"), 
+            font= ('Arial', 11), 
+            padx= 5, 
+            justify= "left"
         )
         message_label.pack(anchor="w")
 
-        time_label = tk.Label(bubble_frame, text=data["time"], bg=bubble_frame.cget("bg"), fg="#374747", font=('Arial', 8, 'italic'), padx=5)
+        time_label = tk.Label(bubble_frame, text= msgData["timestamp"], bg=bubble_frame.cget("bg"), fg="#374747", font=('Arial', 8, 'italic'), padx=5)
         time_label.pack(anchor="e")
 
         def update_message_label_wraplength(event = None):
@@ -720,71 +844,6 @@ class KCollabApp:
         self.chats_frame = self.createChatsUI()
         self.initChats()
 
-
-#p2p functions
-
-    def startP2PServer(self):
-        # self.activeConnections = {}  # Dictionary to store connections (thread-safe)
-        # self.connections_lock = threading.Lock() # Lock for activeConnections
-        def serverThread():
-            server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            server_socket.bind((self.hostIP, self.hostPort))
-            server_socket.listen(100)  # allow multiple connections. 1 = 1 connection, 100 = 100 connections
-            print(f"P2P Server listening on {self.hostIP}:{self.hostPort}")
-
-            while True:  # Accept connections in a loop
-                try:
-                    client_socket, addr = server_socket.accept()
-                    # with self.connections_lock:
-                    #     self.activeConnections[addr] = client_socket
-                    print(f"Connection from {addr}")
-                    threading.Thread(target=self.receivePeerMessage, args=(client_socket, addr), daemon=True).start()
-                except Exception as e:
-                    print(f"Error accepting connection: {e}")
-                    # break # or handle the error appropriately
-                    continue
-            # server_socket.close() # Close when the loop breaks
-        
-        threading.Thread(target=serverThread, daemon= True).start()
-
-    def receivePeerMessage(self, clientSocket, addr):
-        while True:
-            try:
-                data = clientSocket.recv(1024).decode()
-                if data:
-                    try:
-                        message = json.loads(data) # Parse JSON
-                        self.add_message(message, "left")
-                        self.msgCanvas.update_idletasks()
-                        self.msgCanvas.yview_moveto(1)
-                    except json.JSONDecodeError:
-                        print(f"Invalid JSON from {addr}: {data}")
-                else:
-                    break  # Client disconnected
-            except Exception as e:
-                print(f"Error receiving from {addr}: {e}")
-                break
-
-        # with self.connections_lock:
-        #     del self.activeConnections[addr]
-        clientSocket.close()
-
-    def sendP2PMessage(self, data):
-        def run():
-            jsonMsg = json.dumps(data)
-            
-            # with self.connections_lock:
-            for peer in self.currentPeers:
-                ip = peer['ip_addr']
-                port = peer['port']
-                try:
-                    clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    clientSocket.connect((ip,port))
-                    clientSocket.sendall(jsonMsg.encode())
-                    clientSocket.close()
-                except Exception as e:
-                    print(f"Failed to send message", e)
-        threading.Thread(target=run, daemon=True).start()
 
 #DB write functions
 
@@ -848,7 +907,7 @@ class KCollabApp:
             btn = tk.Button(
                 filterFrame, 
                 text=filter, 
-                command= lambda f=filter: self._update_L1_leftPanel(endpoint, callback_name, filterBtns, f) , **filterBtnStyle)
+                command= lambda f=filter: self._updateL1_leftPanel(endpoint, callback_name, filterBtns, f) , **filterBtnStyle)
             btn.pack(side=tk.LEFT, padx=5)
             filterBtns.append(btn)
             
@@ -899,7 +958,7 @@ class KCollabApp:
         )
 
         # populate items in laft panel
-        self._update_L1_leftPanel(endpoint, callback_name, filterBtns, filter_val)
+        self._updateL1_leftPanel(endpoint, callback_name, filterBtns, filter_val)
 
         rightPanelFrame = tk.Frame(frame, bg="white", padx=5, pady=5)
         rightPanelFrame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -921,7 +980,7 @@ class KCollabApp:
 
 #update functions
 
-    def updateTaskStatus(self, statusTxt, isSubtask):
+    def _updateTaskStatus(self, statusTxt, isSubtask):
         statusTxt = statusTxt.lower()
         task_id = self.openedTaskID
 
@@ -948,14 +1007,14 @@ class KCollabApp:
                 if btn.cget('bg') == self.bgs["bg5"]:
                     filter_val = btn.cget("text")
             
-            self._update_L1_leftPanel("tasks/", "populateTasks", filterBtns, filter_val.lower())
+            self._updateL1_leftPanel("tasks/", "populateTasks", filterBtns, filter_val.lower())
         else:
             print("Failed to update task status")
         
 
         
 
-    def _update_L1_leftPanel(self, endpoint, callback_name, filterBtns, filter_val = None):
+    def _updateL1_leftPanel(self, endpoint, callback_name, filterBtns, filter_val = None):
 
         if filter_val is not None:
             filter_val = filter_val.lower()
@@ -975,6 +1034,33 @@ class KCollabApp:
                 else:
                     btn.config(bg=self.bgs["bg4"])
 
+
+
+    def _updateChatStack(self, chat_data):
+        
+        if isinstance(chat_data, list):
+        # Clear existing data when receiving full list
+            self.chatOrder = []
+            self.chatData = {}
+            
+            for chat in chat_data:
+                chat_id = chat['id']
+                self.chatData[chat_id] = chat
+                self.chatOrder.append(chat_id)
+        else:
+            # Single chat update
+            chat_id = chat_data['id']
+            self.chatData[chat_id] = chat_data
+            
+            # Remove if already in order
+            if chat_id in self.chatOrder:
+                self.chatOrder.remove(chat_id)
+            
+            # Add to front of order
+            self.chatOrder.insert(0, chat_id)
+        
+        # Repopulate chat list
+        self.populateChat()
 
 
 

@@ -10,11 +10,12 @@ class userSerializer(serializers.ModelSerializer):
 
 
 class chatSerializer(serializers.ModelSerializer):
-    members = serializers.SerializerMethodField()
     metaData = serializers.SerializerMethodField()
+    last_msg = serializers.SerializerMethodField()
+
     class Meta:
         model = Chat
-        fields = ['id', 'metaData', 'members', 'is_group_chat'] 
+        fields = ['id', 'metaData', 'last_msg', 'is_group_chat'] 
         
     
     def get_metaData(self, obj):
@@ -29,20 +30,25 @@ class chatSerializer(serializers.ModelSerializer):
 
         return {"name": str(name).capitalize(), "icon": str(icon)}
         
-   
-    def get_members(self, obj):
-        user = self.context['request'].user.id
-        users = userSerializer(obj.members.exclude(id = user ), many = True).data
-        filtered_users = [
-            {
-                "name": user["name"],
-                "ip_addr": user["ip_addr"],
-                "port": user["port"]
-            }
-            for user in users
-        ]
+    def get_last_msg(self, obj):
+        last_msg = obj.messages.order_by('-timestamp').first()
+        if last_msg:
+            return messageSerializer(last_msg).data
+        return {"msg": "No message yet"}
 
-        return filtered_users
+    # def get_members(self, obj):
+    #     user = self.context['request'].user.id
+    #     users = userSerializer(obj.members.exclude(id = user ), many = True).data
+    #     filtered_users = [
+    #         {
+    #             "name": user["name"],
+    #             "ip_addr": user["ip_addr"],
+    #             "port": user["port"]
+    #         }
+    #         for user in users
+    #     ]
+
+    #     return filtered_users
     
 
 class teamSerializer(serializers.ModelSerializer):

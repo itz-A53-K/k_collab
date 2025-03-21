@@ -28,7 +28,9 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework.authtoken',
-    'api'
+    'channels',
+    'api',
+    'server'
 ]
 
 MIDDLEWARE = [
@@ -125,4 +127,18 @@ REST_FRAMEWORK = {
         'api.tokenAuth.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
+}
+
+
+ASGI_APPLICATION = "k_collab.asgi.application"
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+        # In production, use a proper channel layer like Redis:
+        # "BACKEND": "channels_redis.core.RedisChannelLayer",
+        # "CONFIG": {
+        #     "hosts": [("127.0.0.1", 6379)],
+        # },
+    }
 }
