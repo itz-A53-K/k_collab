@@ -1,14 +1,15 @@
 # K-Collab
 
-K-Collab is a collaborative platform with a Django REST backend and Tkinter desktop client that includes user management, team management, task management, and real-time chat functionality.
+K-Collab is a collaborative platform with a Django REST backend and Tkinter desktop client that includes user management, team management, task management, and real-time chat functionality using WebSockets.
 
 ## Features
 
-- User Authentication with JWT Tokens
-- Team Management with Group Chat Integration
-- Task & Subtask Management 
-- Individual & Group Chat Functionality
+- User Authentication with Token-based Authentication
+- Team Management with Integrated Group Chats
+- Task & Subtask Management System
+- Real-time Individual & Group Chat functionality using WebSockets
 - Desktop Client UI with Tkinter
+- Real-time Message Updates and Notifications
 
 ## Installation
 
@@ -20,9 +21,8 @@ K-Collab is a collaborative platform with a Django REST backend and Tkinter desk
 2. Create and activate virtual environment:
     ```bash
     python -m venv venv
-    ```
-    ```bash
-    venv/Scripts/activate
+    venv/Scripts/activate  # Windows
+    source venv/bin/activate  # Linux/Mac
     ```
 
 3. Install dependencies:
@@ -40,9 +40,11 @@ K-Collab is a collaborative platform with a Django REST backend and Tkinter desk
     python manage.py createsuperuser
     ```
 
-6. Start the server:
+6. Start the Daphne server (for WebSocket support):
     ```bash
-    python manage.py runserver
+    set DJANGO_SETTINGS_MODULE=k_collab.settings
+    daphne k_collab.asgi:application
+    <!-- daphne k_collab.asgi:application --bind 0.0.0.0 --port 8000 -->
     ```
 
 7. Launch desktop client:
@@ -50,12 +52,20 @@ K-Collab is a collaborative platform with a Django REST backend and Tkinter desk
     python app.py
     ```
 
+## WebSocket Features
+
+- Real-time message delivery
+- Automatic chat group management
+- New chat notifications
+- Live message updates
+- WebSocket endpoint: `ws://localhost:8000/ws/chat/`
+
 ## API Endpoints
 
 ### Authentication
 - **Login**: `POST /api/login/`
   - Request: `{"email": "user@example.com", "password": "password"}`
-  - Response: `{"message": "Login successful", "authToken": "token", "user": {...}}`
+  - Response: `{"message": "Login successful", "authToken": "token"}`
 
 - **Logout**: `POST /api/logout/`
   - Requires Authentication
@@ -75,15 +85,23 @@ K-Collab is a collaborative platform with a Django REST backend and Tkinter desk
   - Returns chats ordered by last message time
   - Includes metadata for both individual and group chats
 
-- **Messages**: `GET/POST /api/chat/messages/`
-  - GET: Retrieves chat messages with chat_id parameter
-  - POST: Creates message with either chat_id or receiver_id
+- **Chat Details**: `GET /api/chats/<uuid:chat_id>/`
+  - Retrieves chat details and messages
+
+### Tasks
+- **List Tasks**: `GET /api/tasks/`
+  - Returns user's tasks filtered by status
+  - Includes both tasks and subtasks
+
+- **Task Details**: `GET/PUT /api/tasks/<int:task_id>/`
+  - GET: Retrieves task details
+  - PUT: Updates task status
 
 ## Models
 
 ### User
 - Custom user model with email authentication
-- Fields: email, name, phone, dp, designation, ip_addr, port
+- Fields: email, name, phone, dp, designation, ip_addr, port, isAdmin
 
 ### Team
 - UUID primary key
@@ -101,20 +119,27 @@ K-Collab is a collaborative platform with a Django REST backend and Tkinter desk
 - Fields: title, description, assigned_user, status, deadline
 
 ### Chat
-- Supports both individual and group chats
+- Supports individual and group chats
 - UUID primary key
 - Fields: members (M2M with User), is_group_chat
 
 ### Message
-- Timestamped chat messages
+- Timestamped chat messages. Real-time message delivery via WebSockets
 - Fields: sender, chat, content, timestamp
 
 ## Desktop Client Features
 
 - Login with token persistence
-- Collapsible navigation sidebar
-- Real-time chat interface
+- Real-time chat interface with WebSocket integration
 - Dashboard, Chat, and Task sections
+- Filters in tasks and chats for better organization
 - Modern UI with custom theme colors
+- Collapsible navigation sidebar
 
-## License
+## Dependencies
+
+- Django
+- Django REST Framework
+- Channels (for WebSocket support)
+- Daphne (ASGI server)
+- Tkinter (for desktop client)

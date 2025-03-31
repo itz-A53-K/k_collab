@@ -12,6 +12,12 @@ User = get_user_model()
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         await self.accept()
+        # Add user to a general users group for new chat notifications
+        await self.channel_layer.group_add(
+            "users",
+            self.channel_name
+        )
+
 
     async def disconnect(self, close_code):
         pass
@@ -60,15 +66,28 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 )
 
             
+            if receiver_id:
+                # If this is a new chat (receiver_id present), send a special event
+                await self.channel_layer.group_send(
+                    "users",  # A group containing all online users
+                    {
+                        "type": "WS_newChat",
+                        "msg_data": new_msgData,
+                        'chat_data': chat_data,
+                        'receiver_id': receiver_id
+                    }
+                )
 
-            await self.channel_layer.group_send(
-                group_name,
-                {
-                    "type": "WS_chatMessage",
-                    "msg_data": new_msgData,
-                    'chat_data': chat_data
-                }
-            )
+            else:
+                # Normal message in existing chat
+                await self.channel_layer.group_send(
+                    group_name,
+                    {
+                        "type": "WS_chatMessage",
+                        "msg_data": new_msgData,
+                        'chat_data': chat_data
+                    }
+                )
 
     
     async def WS_chatMessage(self, event):
@@ -79,6 +98,32 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'msg_data': event['msg_data'],
             'chat_data': event['chat_data'],
         }))
+
+
+    async def WS_newChat(self, event):
+
+        receiver_id = event['receiver_id']
+
+        # Only process if this consumer belongs to the receiver
+        if str(receiver_id) == str(self.scope['user'].id):
+
+            print("New chat event received")
+            # Add receiver to the new chat's group
+            await self.channel_layer.group_add(
+                f"chat_{event['chat_data']['id']}",
+                self.channel_name
+            )
+            
+            # Send the new chat data to the client
+            await self.send(text_data=json.dumps({
+                'type': 'new_chat',
+                'chat_data': event['chat_data'],
+                'msg_data': event['msg_data']
+            }))
+
+
+
+
 
     
     @database_sync_to_async

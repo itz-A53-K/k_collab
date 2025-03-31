@@ -5,6 +5,7 @@ pillow
 channels 
 channels[daphne]
 websockets
+tkcalendar
 
 
 

@@ -16,6 +16,20 @@ from itertools import chain
 import json
 
 
+class taskCreate(generics.CreateAPIView):
+    serializer_class = task_subTaskSerializer
+    permission_classes = [IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        user = request.user
+        data = request.data
+
+        print(data)
+
+        return Response(data, status=status.HTTP_200_OK)
+
+
+
 class task_subTaskViewUpdate(generics.RetrieveUpdateAPIView):
     serializer_class= task_subTask_detailSerializer
     permission_classes = [IsAuthenticated]
@@ -31,7 +45,10 @@ class task_subTaskViewUpdate(generics.RetrieveUpdateAPIView):
                 return SubTask.objects.get(pk=pk)
             else:
                 return Task.objects.get(pk=pk)
-        except SubTask.DoesNotExist or Task.DoesNotExist: 
+        except (SubTask.DoesNotExist, Task.DoesNotExist): 
+            return None
+        except Exception as e:
+            print(e)
             return None
     
     def retrieve(self, request, *args, **kwargs):
@@ -76,55 +93,6 @@ class task_subTaskList(generics.ListAPIView):
 
 
 
-
-# class messageCreate(generics.CreateAPIView):
-#     permission_classes = [IsAuthenticated]
-#     serializer_class = messageSerializer
-    
-#     def create(self, request, *args, **kwargs):
-#         data = request.data
-#         sender_id = data.get('sender_id')
-#         chat_id = data.get('chat_id')
-#         receiver_id = data.get('receiver_id') #required if new individual chat
-#         content = data.get('content')
-#         timestamp = data.get('timestamp', datetime.now())
-
-#         if not content:
-#             return Response({"error": "Content cannot be empty"}, status=status.HTTP_400_BAD_REQUEST)
-
-#         if chat_id:
-#             chat = get_object_or_404(Chat, id=chat_id) 
-#         else:
-#             if not receiver_id:
-#                 return Response({"error": "receiver_id is required"}, status=status.HTTP_400_BAD_REQUEST)
-            
-#             receiver = User.objects.filter(id=receiver_id).first()
-#             if not receiver:
-#                 return Response({"error": "Invalid receiver_id."}, status=status.HTTP_404_NOT_FOUND)
-            
-#             sender = User.objects.filter(id=sender_id).first()
-#             if sender == receiver:
-#                 return Response({"error": "Sender and receiver cannot be the same"}, status=status.HTTP_400_BAD_REQUEST)
-            
-#             members = [sender, receiver] 
-#             chat = Chat.objects.filter(members__in=members, is_group_chat = False).first()
-#             if not chat:
-#                 chat = Chat.objects.create(is_group_chat=False)
-#                 chat.members.set(members)
-#                 chat.save()
-
-#         if sender not in chat.members.all():
-#             return Response({"error": "You are not a member of this chat"}, status=status.HTTP_403_FORBIDDEN)
-        
-#         message = Message.objects.create(sender=sender, chat=chat, content=content, timestamp = timestamp)
-#         serializer = messageSerializer(message)
-#         return Response(
-#             serializer.data, 
-#             status=status.HTTP_201_CREATED
-#         )
-                
-
-
 class teamListCreate(generics.ListCreateAPIView):
     serializer_class = teamSerializer
     permission_classes = [IsAuthenticated]
@@ -133,7 +101,6 @@ class teamListCreate(generics.ListCreateAPIView):
         user = self.request.user
         teams = user.teams.all().order_by('-created_at')
         return teams
-
 
 
 
@@ -152,6 +119,7 @@ class teamContent(APIView):
             'last message': messageSerializer(lastMsg).data if lastMsg else {"msg": "No message"},  #latest message 
         }
         return Response(data, status=status.HTTP_200_OK)
+
 
 
 class chatDetail(generics.RetrieveAPIView):
@@ -200,37 +168,32 @@ class chatList(generics.ListAPIView):
     
 
 class userList(generics.ListAPIView):
-    queryset = User.objects.all()
+    permission_classes = [IsAuthenticated]
     serializer_class = userSerializer
 
+    def get_queryset(self):
+        user = self.request.user
+        qs = User.objects.exclude(id=user.id)
+        print(qs)
+        return qs
 
 
-class updateUserIP(APIView):
+
+class userDetail(APIView):
     permission_classes = [IsAuthenticated]
 
-    def put(self, request):
+    def get(self, request):
         user = request.user
-        ip_addr = request.META['REMOTE_ADDR']
-        
-        ip_addr = '127.0.0.2'
-        # ip_addr = '127.0.0.3' 
-        port = request.data.get('port', 5000)
 
-        if not ip_addr or not port:
-            return Response({"error": "Both IP and Port is required"}, status= status.HTTP_400_BAD_REQUEST)
+        details = {
+            'id': user.id,
+            'name': user.name,
+            'email': user.email,
+            'isAdmin': user.isAdmin,
+            'dp': user.dp.url if user.dp else None
+        }
 
-        user.ip_addr = ip_addr
-        user.port = port
-        user.save()
-
-        return Response({
-            "message": "IP updated", 
-            "uID": user.id, 
-            "uName": user.name,
-            "isAdmin": user.isAdmin,
-            'ip': ip_addr, 
-            "port": port
-        }, status= status.HTTP_200_OK)
+        return Response(details, status=status.HTTP_200_OK)
 
 
 

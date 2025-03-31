@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
-from django.utils import timezone
+from tkcalendar import Calendar  # pip install tkcalendar
 import socket, threading, requests, json, re, os, time, datetime, asyncio, websockets
 
 
@@ -49,47 +49,30 @@ class KCollabApp:
 
     def authenticate(self):
         token = self.load_token()
-        if token and self.updateIP(token):
+        if token and self.get_userDetails(token):
             self.initMainUI()
-            # self.startP2PServer()
         else:
             self.initLoginUI()
 
 
-    def updateIP(self, token):
+    def get_userDetails(self, token):
         try:
             headers = {"Authorization": f"Bearer {token}"}
-            resp = requests.put(self.baseURL + "update_ip/", headers=headers)
+            resp = requests.get(self.baseURL + "user/details/", headers=headers)
 
             if resp.status_code == 200:
-                data = resp.json()
                 self.authToken = token
-                self.user_id = data.get("uID")
-                self.user_name = data.get("uName")
-                self.isAdmin = data.get("isAdmin")
-                self.hostIP = data.get("ip")
-                self.hostPort = data.get("port")
 
+                for key, val in resp.json().items():
+                    setattr(self, f"user_{key}", val)
 
                 return True
             else:
-                print("Failed to update IP:", resp.json())
+                print("Failed to get user details:", resp.json())
         except requests.exceptions.RequestException as e:
             print("Network error:", e)
 
         return False
-
-    # def connectToWs(self):
-    #     """Connects to the WebSocket server in a separate thread."""
-
-    #     def runLoop():
-    #         try:
-    #             asyncio.run(self.websocket_handler())
-    #         except Exception as e:
-    #             print(f"WebSocket error: {e}")
-        
-    #     wsThread = threading.Thread(target=runLoop, daemon=True)
-    #     wsThread.start()
 
     def connectToWs(self):
         """Connects to the WebSocket server in a separate thread."""
@@ -114,7 +97,7 @@ class KCollabApp:
                     await self.ws.send(initialData)
                     await self.receiveMessage()
             
-            except ConnectionRefusedError:
+            except ConnectionRefusedError as e:
                 print(f"WebSocket connection failed: {e}")
                 self.ws = None
             except Exception as e:
@@ -140,7 +123,7 @@ class KCollabApp:
         """Process incoming WebSocket messages."""
         try:
             data = json.loads(msg)
-            print("Received new message")
+            print(f"Received new message from:: {data.get('msg_data').get('sender').get('name')} (id: {data.get('msg_data').get('sender').get('id')})")
 
             if data:
 
@@ -171,7 +154,7 @@ class KCollabApp:
                 msgData = {
                     "msg": msgInp,
                     "chat_id": str(self.openedChatID),
-                    "user_id": str(self.user_id),  # Send user ID
+                    "user_id": str(self.user_id),
                 }
                 asyncio.run(self.ws.send(json.dumps(msgData))) # Send message via WebSocket
                 self.msgInput.delete(0, tk.END)
@@ -291,30 +274,134 @@ class KCollabApp:
     def initTasks(self):
         self.tasks_frame.pack(fill=tk.BOTH, expand=True)
 
-    def initAddTaskForm(self):
 
-        formFrame = tk.Frame(self.mainFrame, bg="red", padx=30, pady=30, bd=3, relief="flat")
+    def initAddTaskForm(self, addTaskBtn):
+        formFrame = tk.Frame(self.mainFrame, bg=self.bgs["bg1"], padx=30, pady=30, bd=3, relief="flat")
         formFrame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-        closeBtn = tk.Button(formFrame, text="X", font=('Arial', 12, 'bold'), bg="#fff", fg="black", bd=0, command= lambda: formFrame.destroy())
-        closeBtn.place(anchor=tk.CENTER, relx = 1.5, rely = 0)
 
-        tk.Label(formFrame, text="Add Task", font=('Arial', 20, 'bold'), bg=formFrame.cget("bg"), fg="#222").pack(pady=20)
+        addTaskBtn.config(state="disabled")
+        def closeForm():
+            formFrame.destroy()
+            addTaskBtn.config(state="normal")
+   
+        headerFrame = tk.Frame(formFrame, bg=formFrame.cget("bg"))
+        headerFrame.pack(fill="x", pady=(0, 20))
+
+        # Title
+        tk.Label(headerFrame, text="Add Task", font=('Arial', 20, 'bold'), bg=headerFrame.cget("bg"), fg="#fff").pack(side="left", pady=5)
+
+        # Close button
+        closeBtn = tk.Button(headerFrame, text="✕", font=('Arial', 12, 'bold'), bg="red", fg="#fff", bd=0, padx=8, pady=4, command= closeForm)
+        closeBtn.pack(side="right")
 
 
-        inputStyle = {"font": ('Arial', 12), "width": 40, "bg": self.bgs["bg1_light"], "bd": 1, "relief": "groove",}
+        inputStyle = {
+            "font": ('Arial', 12),
+            "width": 40,
+            "bg": "#fff",
+            "bd": 0,
+            "relief": "groove",
+        }
+        labelStyle = {
+            "font": ('Arial', 13, 'bold'),
+            "bg": formFrame.cget("bg"),
+            "fg": "#fff",
+            "anchor": "w"
+        }
 
+
+        # Task Title
+        tk.Label(formFrame, text="Task Title *", **labelStyle).pack(anchor="w")
         titleInput = tk.Entry(formFrame, **inputStyle)
-        titleInput.pack(pady=5, ipadx=5, ipady=5)
+        titleInput.pack(pady=(5, 15), ipadx=5, ipady=5)
+
+        # Description
+        tk.Label(formFrame, text="Description *", **labelStyle).pack(anchor="w")
+        descInput = tk.Text(formFrame, height=4, **inputStyle)
+        descInput.pack(pady=(5, 15))
+
+        # Assignment Frame
+        assignFrame = tk.Frame(formFrame, bg=formFrame.cget("bg"))
+        assignFrame.pack(fill="x", pady=(0, 15))
+
+        assignType = tk.StringVar(value="user")
+
+        def toggle_assignment(*args):
+            if assignType.get() == "user":                
+                userCombo.set("Select User")
+                teamCombo.set("Select Team")
+                teamCombo.config(state="disabled")
+                userCombo.config(state="readonly")
+            else:                
+                teamCombo.set("Select Team")
+                userCombo.set("Select User")
+                userCombo.config(state="disabled")
+                teamCombo.config(state="readonly")
+
+        radioStyle={
+            "variable":assignType,
+            "bg":formFrame.cget("bg"), 
+            "fg":"#fff", 
+            "font":('Arial', 12, 'bold'), 
+            "command":toggle_assignment
+        }
+
+        tk.Label(assignFrame, text="Assign to:", **labelStyle).pack(anchor="w")
+
+        tk.Radiobutton(assignFrame, text="User", value="user", **radioStyle).pack(side="left", padx=(2, 10))
+        tk.Radiobutton(assignFrame, text="Team", value="team", **radioStyle).pack(side="left")
+
+
+        comboFrame = tk.Frame(formFrame, bg=formFrame.cget("bg"))
+        comboFrame.pack(fill="x", pady=(0, 15))
+
+        # User Combobox
+        userCombo = ttk.Combobox(comboFrame, font=inputStyle["font"], width=40, state="readonly")
+        userCombo.pack(pady=5)
+        userCombo.set("Select User")
+
+        # Team Combobox
+        teamCombo = ttk.Combobox(comboFrame, font=inputStyle["font"], width=40, state="disabled")
+        teamCombo.pack(pady=5)
+        teamCombo.set("Select Team")
+
+        # Deadline
+        tk.Label(formFrame, text="Deadline *", **labelStyle).pack(anchor="w")
+        deadlineFrame = tk.Frame(formFrame, bg=formFrame.cget("bg"), width= 40)
+        deadlineFrame.pack(fill="x", pady=(5, 15))
+
+        # Date picker 
+        dateInput = tk.Entry(deadlineFrame, **{**inputStyle, 'width': 36})
+        dateInput.pack(side="left", ipady=5)
+        dateInput.insert(0, datetime.date.today().strftime('%Y-%m-%d'))
         
+        calendarBtn = tk.Button(deadlineFrame, text="📅", font=('Arial', 12), width= 4, bg="#fff", command=lambda: self.show_calendar(dateInput))
+        calendarBtn.pack(side="left", padx=5)
 
-        passwordLabel = tk.Label(self.loginFrame, text="Enter Password:", font=('Arial', 13, 'bold'), bg=self.loginFrame.cget("bg"), fg="#222")
-        passwordLabel.pack(pady=5, anchor="w")
+        # Submit Button
+        submitBtn = tk.Button(
+            formFrame, 
+            text="Create Task", 
+            font=('Arial', 13),
+            bg=self.bgs["bg5"], 
+            fg="white", 
+            pady=10, 
+            bd=0, 
+            width=25,
+            command=lambda: self.createTask({
+                'title': titleInput.get(),
+                'desc': descInput.get("1.0", tk.END),
+                'assigned_user': userCombo.get() if assignType.get() == "user" else None,
+                'assigned_team': teamCombo.get() if assignType.get() == "team" else None,
+                'deadline': dateInput.get()
+            })
+        )
+        submitBtn.pack(pady=20)
 
-        self.passwordInput = tk.Entry(self.loginFrame, show = "*", **inputStyle)
-        self.passwordInput.pack(pady=5, ipadx=5, ipady=5)
+        # Fetch users and teams data
+        self.asyncGetRequest("users/", lambda data: userCombo.configure(values=[f"{u['name']} ({u['id']})" for u in data]))
+        self.asyncGetRequest("teams/", lambda data: teamCombo.configure(values=[f"{t['name']} ({t['id']})" for t in data]))
 
-        self.loginBtn = tk.Button(self.loginFrame, text="LOGIN", font=('Arial', 13), bg=self.bgs["bg1"], fg="white", pady=10, bd=0, width= 25, command=self.handleLoginClick)
-        self.loginBtn.pack(pady=20)
 
 
 #UI create events
@@ -388,7 +475,7 @@ class KCollabApp:
                 token = resp.json().get('authToken')
 
                 self.save_token(token)
-                if self.updateIP(token):
+                if self.get_userDetails(token):
                     self.loginFrame.destroy() # Remove login UI
                     self.initMainUI()
                 else:
@@ -574,8 +661,11 @@ class KCollabApp:
             taskDetailFrame.bind("<Configure>", lambda event: setDescWraplength(event, descLabel))
 
 
-    def createTask(self):
-        pass
+    def createTask(self, data):
+        print(data)
+        headers = {"Authorization": f"Bearer {self.authToken}"}
+        resp = requests.post(f"{self.baseURL}task/c/", json=data, headers=headers)
+
 
 
 
@@ -706,7 +796,6 @@ class KCollabApp:
 # helper events
     def clear_content(self):
         for widget in self.content.winfo_children():
-            # widget.destroy()
             widget.pack_forget()
 
     def load_token(self):
@@ -836,6 +925,20 @@ class KCollabApp:
         threading.Thread(target=run, daemon=True).start()
 
 
+    def show_calendar(self, entry_widget):
+        def set_date():
+            entry_widget.delete(0, tk.END)
+            entry_widget.insert(0, cal.selection_get().strftime('%Y-%m-%d'))
+            top.destroy()
+
+        top = tk.Toplevel()
+        top.grab_set()  # Make the dialog modal
+        
+        cal = Calendar(top, selectmode='day', date_pattern='yyyy-mm-dd')
+        cal.pack(padx=10, pady=10)
+        
+        tk.Button(top, text="Select", command=set_date).pack(pady=5)
+
 
 #RELOAD function 
     def reloadChats(self):
@@ -883,8 +986,16 @@ class KCollabApp:
         fr.pack(side=tk.TOP, anchor=tk.W, fill=tk.X)
         title = tk.Label(fr, text= titleTxt, bg=panelBG, font=("Arial", 16, "bold")).pack(side=tk.LEFT, anchor=tk.W, padx=10)
 
-        if titleTxt.lower() in ["task", "tasks"] and self.isAdmin == True:
-            btn = tk.Button(fr, text="Add Task", bg=panelBG, font=("Arial", 12, "bold"), command = self.initAddTaskForm)
+        if titleTxt.lower() in ["task", "tasks"] and self.user_isAdmin == True:
+            btn = tk.Button(
+                fr, 
+                text="Add Task", 
+                font=("Arial", 10, "bold"), 
+                bg=self.bgs["bg5"], 
+                fg="white", 
+                pady=4
+            )
+            btn.config(command= lambda b=btn: self.initAddTaskForm(b))
             btn.pack(side=tk.RIGHT, anchor=tk.W, ipadx= 2, ipady = 2)
 
 
