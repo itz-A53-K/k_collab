@@ -95,6 +95,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # It serializes the message and sends it to the WebSocket.
 
         await self.send(text_data=json.dumps({
+            'type': 'new_chatMsg',
             'msg_data': event['msg_data'],
             'chat_data': event['chat_data'],
         }))
