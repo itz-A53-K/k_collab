@@ -6,7 +6,8 @@ from datetime import datetime
 class userSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'name', 'email', 'phone', 'designation', 'dp', 'ip_addr', 'port']
+        fields = ['id', 'name', 'email','dp']
+        # fields = ['id', 'name', 'email', 'phone', 'designation', 'dp', 'ip_addr', 'port']
 
 
 class chatSerializer(serializers.ModelSerializer):

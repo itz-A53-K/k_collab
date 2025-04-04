@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 from tkcalendar import Calendar
 from PIL import Image, ImageTk
+from io import BytesIO
 import threading, requests, json, re, os, time, datetime, asyncio, websockets
 
 
@@ -283,12 +284,12 @@ class KCollabApp:
         self.tasks_frame.pack(fill=tk.BOTH, expand=True)
 
 
-    def initAddTaskForm(self, addTaskBtn):
+    def initAddTaskModal(self, addTaskBtn):
         formFrame = tk.Frame(self.mainFrame, bg=self.bgs["bg1"], padx=30, pady=30, bd=3, relief="flat")
         formFrame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
         addTaskBtn.config(state="disabled")
-        def closeForm():
+        def closeModal():
             formFrame.destroy()
             addTaskBtn.config(state="normal")
    
@@ -299,7 +300,7 @@ class KCollabApp:
         tk.Label(headerFrame, text="Add Task", font=('Arial', 16, 'bold'), bg=headerFrame.cget("bg"), fg="#fff").pack(side="left", pady=5)
 
         # Close button
-        closeBtn = tk.Button(headerFrame, text="✕", font=('Arial', 12, 'bold'), bg="red", fg="#fff", bd=0, padx=8, pady=4, command= closeForm)
+        closeBtn = tk.Button(headerFrame, text="✕", font=('Arial', 12, 'bold'), bg="red", fg="#fff", bd=0, padx=8, pady=4, command= closeModal)
         closeBtn.pack(side="right")
 
 
@@ -411,14 +412,14 @@ class KCollabApp:
         self.asyncGetRequest("teams/", lambda data: teamCombo.configure(values=[f"{t['name']} ({t['id']})" for t in data]))
 
 
-    def initContactList(self, newChatBtn):
+    def initContactModal(self, newChatBtn):
         bgColor = self.bgs["bg4"]
         
         frame = tk.Frame(self.content, bg=bgColor, padx=10, pady=10)
         frame.place(x = newChatBtn.winfo_x(), y = newChatBtn.winfo_y()+newChatBtn.winfo_height()+10, width=350, height=600)
 
         newChatBtn.config(state="disabled")
-        def closeForm():
+        def closeModal():
             frame.destroy()
             newChatBtn.config(state="normal")
 
@@ -428,34 +429,60 @@ class KCollabApp:
         # Title
         tk.Label(headerFrame, text="New Chat", font=('Arial', 16, 'bold'), bg=headerFrame.cget("bg"), fg="#fff").pack(side="left", pady=5)
 
-        closeBtn = tk.Button(headerFrame, text="✕", font=('Arial', 12, 'bold'), bg="red", fg="#fff", bd=0, padx=8, pady=4, command= closeForm)
+        closeBtn = tk.Button(headerFrame, text="✕", font=('Arial', 12, 'bold'), bg="red", fg="#fff", bd=0, padx=8, pady=4, command= closeModal)
         closeBtn.pack(side="right")
 
 
         canvas, canvasFrame = self.createScrollableCanvas(frame, bgColor)
 
-        for i in range(100):
-            chat_item = tk.Frame(canvasFrame, bg=bgColor, pady=10, padx=10)
-            chat_item.pack(fill="x")
 
-            lbl = tk.Label(chat_item, text=f"Chat {i+1}", font=('Arial', 12), bg=bgColor, fg="#fff")
-            lbl.pack(side="left")
-            
+        def populateContacts(data):
+            for user in data:
+                if user['id'] != self.user_id:
+                    userFrame = tk.Frame(canvasFrame, bg=bgColor, pady=10, padx=10)
+                    userFrame.pack(fill="x")
 
-            chatBindings ={
-                '<MouseWheel>': lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"),
-                '<Enter>': lambda e, item=chat_item: self.mouseEnter_effect1(item, self.bgs["bg4_mid"]),
-                '<Leave>': lambda e, item=chat_item: self.mouseLeave_effect1(item, bgColor),
-                # '<Button-1>': lambda e,c_id = chat_id: 
-                #             self.asyncGetRequest(
-                #                 endpoint = f'chats/{c_id}/',
-                #                 callback = self.handleChatClick
-                #             ),
-            }
+                    if user['dp']:
+                        response = requests.get(user['dp'])
+                        if response.status_code == 200:
+                            # Create PhotoImage from downloaded data
+                            image = Image.open(BytesIO(response.content))
+                            image = image.resize((45, 45), Image.Resampling.LANCZOS)  # Resize image
+                            photo = ImageTk.PhotoImage(image)
+                    else:
+                        # Use default image
+                        photo = ImageTk.PhotoImage(Image.open("icons/chat_white.png"))
 
-            for event, func in chatBindings.items():
-                chat_item.bind(event, func)
-                lbl.bind(event, func)
+                    #Keep reference to prevent garbage collection
+                    userFrame.dp = photo
+                    
+                    dpLabel = tk.Label(userFrame, image=photo, bg=bgColor, bd= 1, relief='solid')
+                    dpLabel.pack(side="left")
+
+                    fr = tk.Frame(userFrame, bg=bgColor)
+                    fr.pack(side="left", padx=5)
+
+                    name = tk.Label(fr, text=user['name'], font=('Arial', 12), bg=bgColor, fg="#fff")
+                    name.pack(side="top", anchor='w')
+
+                    email = tk.Label(fr, text=user['email'], font=('Arial', 12), bg=bgColor, fg="#fff")
+                    email.pack(side="bottom", anchor='w')
+
+                    Bindings ={
+                        '<MouseWheel>': lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"),
+                        '<Enter>': lambda e, item=userFrame: self.mouseEnter_effect1(item, self.bgs["bg4_mid"]),
+                        '<Leave>': lambda e, item=userFrame: self.mouseLeave_effect1(item, bgColor),
+                        '<Button-1>': lambda e,u_id = user['id'], name = user['name']: [closeModal(), self.handleChatClick({'receiver_id': u_id}, newChat = True)], 
+                    }
+
+                    for event, func in Bindings.items():
+                        userFrame.bind(event, func)
+                        name.bind(event, func)
+                        email.bind(event, func)
+
+
+        self.asyncGetRequest("users/", populateContacts)
+
 
         
 
@@ -610,13 +637,19 @@ class KCollabApp:
         elif section.lower() == "tasks":
             self.initTasks()
         
-    def handleChatClick(self, data):
+    def handleChatClick(self, data, newChat = False):
 
-        chat_id = data.get('chat')['id']
-        if self.openedChatID != chat_id:
+        if newChat:
+            chat_id = None
+            
 
+        else:
+            chat_id = data.get('chat').get('id')
             chatMeta = data.get('chat').get('metaData')
             messages = data.get('messages')
+            
+        if self.openedChatID != chat_id:
+
 
             if hasattr(self, "activeChat"): 
                 # Remove the previous active chat's bgcolor
@@ -690,8 +723,9 @@ class KCollabApp:
 
 
             #populate messages
-            for msg in messages:
-                self.addMessage2Canvas(msg)
+            if messages:
+                for msg in messages:
+                    self.addMessage2Canvas(msg)
 
     def handleTaskClick(self, data, updateTask = False):
         task_id = data.get('id')
@@ -1111,7 +1145,7 @@ class KCollabApp:
                 pady=4,
                 cursor="hand2",
             )
-            btn.config(command= lambda b=btn: self.initAddTaskForm(b))
+            btn.config(command= lambda b=btn: self.initAddTaskModal(b))
             btn.pack(side=tk.RIGHT, anchor=tk.W, ipadx= 6, ipady = 6)
 
         elif titleTxt.lower() in ["chat", "chats"]:
@@ -1127,7 +1161,7 @@ class KCollabApp:
             )
 
             btn.pack(side=tk.RIGHT, anchor=tk.W, ipadx= 6, ipady = 6)
-            btn.config(command= lambda b=btn: self.initContactList(b))
+            btn.config(command= lambda b=btn: self.initContactModal(b))
 
         filterFrame = tk.Frame(leftPanalFrame, bg=panelBG, pady=5, padx=5)
         filterFrame.pack(side=tk.TOP, anchor=tk.W, fill=tk.X, pady=10)

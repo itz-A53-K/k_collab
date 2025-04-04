@@ -174,7 +174,6 @@ class userList(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         qs = User.objects.exclude(id=user.id)
-        print(qs)
         return qs
 
 
