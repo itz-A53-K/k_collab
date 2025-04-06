@@ -2,6 +2,7 @@ import json, requests
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from asgiref.sync import async_to_sync
 from datetime import datetime
 from api import models, serializers
@@ -11,13 +12,29 @@ User = get_user_model()
 
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        await self.accept()
-        # Add user to a general users group for new chat notifications
-        await self.channel_layer.group_add(
-            "users",
-            self.channel_name
-        )
+        try:
+            user_id = self.scope['url_route']['kwargs']['user_id']
+            
+            user = await self.getUser(user_id)
+            if user is None:
+                print("Invalid user ID")
+                await self.close()
+                return
+            
+            self.scope['user'] = user           
+            
 
+            await self.accept()
+
+            # Add user to a general users group for new chat notifications
+            await self.channel_layer.group_add(
+                "users",
+                self.channel_name
+            )
+
+        except Exception as e:
+            print(f"Error in connect: {str(e)}")
+            await self.close()
 
     async def disconnect(self, close_code):
         pass
@@ -44,6 +61,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         f"chat_{chatID}",
                         self.channel_name
                     )
+
 
             except Exception as e:
                 print("err: ",e)
@@ -78,6 +96,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     }
                 )
 
+                # Send immediate confirmation to sender
+                await self.send(text_data=json.dumps({
+                    'type': 'new_chat',
+                    'chat_data': chat_data,
+                    'msg_data': new_msgData
+                }))
+
             else:
                 # Normal message in existing chat
                 await self.channel_layer.group_send(
@@ -95,23 +120,25 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # It serializes the message and sends it to the WebSocket.
 
         await self.send(text_data=json.dumps({
-            'type': 'new_chatMsg',
+            'type': 'chatMsg',
             'msg_data': event['msg_data'],
             'chat_data': event['chat_data'],
         }))
 
 
     async def WS_newChat(self, event):
+        user_id = str(self.scope['user'].id)
+        receiver_id = str(event['receiver_id'])
+        group_name = f"chat_{event['chat_data']['id']}"
 
-        receiver_id = event['receiver_id']
 
         # Only process if this consumer belongs to the receiver
-        if str(receiver_id) == str(self.scope['user'].id):
+        if user_id == receiver_id:
+            print("User is receiver of new chat")
 
-            print("New chat event received")
             # Add receiver to the new chat's group
             await self.channel_layer.group_add(
-                f"chat_{event['chat_data']['id']}",
+                group_name,
                 self.channel_name
             )
             
@@ -121,6 +148,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'chat_data': event['chat_data'],
                 'msg_data': event['msg_data']
             }))
+
 
 
 
@@ -160,19 +188,22 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
                 members = [sender, receiver]
 
-                chat = models.Chat.objects.filter(members__in=members, is_group_chat = False).first()
+                chat = models.Chat.objects.filter(
+                    Q(members=sender) & Q(members=receiver),
+                    is_group_chat = False
+                ).first()
 
                 if not chat:
                     chat = models.Chat.objects.create(is_group_chat=False)
                     chat.members.set(members)
                     chat.save()
+                    print("New chat created")
 
 
             if sender not in chat.members.all():
                 raise PermissionError("User not a member of this chat")
             
             message = models.Message.objects.create(sender=sender, chat=chat, content=msg, timestamp = timestamp)
-            print(message)
 
             msgSerializer = serializers.messageSerializer(message)
             chatSerializer = serializers.chatSerializer(chat, context={'request': requests})
@@ -195,8 +226,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def getUser(self, user_id):
-        return User.objects.get(id=user_id)
-
+        try:
+            return User.objects.get(id=user_id)
+        except Exception as e:
+            print(f"Error fetching user: {str(e)}")
+            return None
     
     @database_sync_to_async
     def getUserChats(self, sender_id):
