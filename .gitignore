@@ -1,10 +1,15 @@
+# Python
 __pycache__/
-*.__pycache__
-mysql_db.sql
-db.sqlite3
+*.py[cod]
+*$py.class
+*.so
 
-pip-log.txt
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
 
+# Virtual Environment
 .env
 .venv
 env/
@@ -13,10 +18,41 @@ ENV/
 env.bak/
 venv.bak/
 
-dmypy.json
+# Database
+*.sqlite3
+*.sqlite3-journal
+mysql_db.sql
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs and temporary files
 *.log
+pip-log.txt
+dmypy.json
+.mypy_cache/
+.pytest_cache/
+coverage.xml
+.coverage
 
-
+# Project specific
 kcollab_auth_token.json
-*.css
 media/*/*
+# static/
+*.css
+
+# System specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Django
+local_settings.py
+*.pot
+*.pyc
+db.sqlite3-journal
+# Do NOT ignore migrations
+# */migrations/* 
