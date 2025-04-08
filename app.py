@@ -132,17 +132,16 @@ class KCollabApp:
 
             print(f"Received new message! (Type: {dataType})")
 
-            if dataType in ['chatMsg', 'new_chat']:
+            if dataType in ['chatMsg']:
 
                 chat_data = data.get('chat_data')
                 msg_data = data.get('msg_data')
-
 
                 self._updateChatStack(chat_data)
 
                 if chat_data['id'] == self.openedChatID or self.current_receiver_id:
                     self.addMessage2Canvas(msg_data)
-                    # self.msgCanvas.update_idletasks()
+                    self.msgCanvas.update_idletasks()
                     self.msgCanvas.yview_moveto(1)
                 else:
                     # Notify user of new message ; like show a notification icon on respective chat and populateChat where latast msg chat is in top
@@ -891,6 +890,8 @@ class KCollabApp:
 
             if 'sender' in lastMsg:
                 msgTxt = f"{lastMsg.get('sender')['name']}: {lastMsg.get('content')}" if chat['is_group_chat'] else lastMsg.get('content')
+                msgTxt = f"{msgTxt[:35]}..." if len(msgTxt) >35 else msgTxt
+
             lastMsg_label = tk.Label(chatFrame, text= msgTxt, bg=panelBG, font=('Arial', 9))
             lastMsg_label.pack(anchor="w")
 
@@ -1047,20 +1048,15 @@ class KCollabApp:
             bg= bubble_frame.cget("bg"), 
             font= ('Arial', 11), 
             padx= 5, 
-            justify= "left"
+            justify= "left",
+            wraplength= getattr(self,"chat_rightPanelFrame").winfo_width()*0.7
         )
         message_label.pack(anchor="w")
 
         time_label = tk.Label(bubble_frame, text= msgData["timestamp"], bg=bubble_frame.cget("bg"), fg="#374747", font=('Arial', 8, 'italic'), padx=5)
         time_label.pack(anchor="e")
 
-        def update_message_label_wraplength(event = None):
-            if message_label and message_label.winfo_exists():
-                message_label.config(wraplength= getattr(self,"chat_rightPanelFrame").winfo_width()*0.7)
-
-        self.root.bind("<Configure>", update_message_label_wraplength)
-
-        update_message_label_wraplength()
+        getattr(self, "chat_rightPanelFrame").bind("<Configure>", self._update_message_label_wraplength)
     
 
     def asyncGetRequest(self, endpoint: str, callback, params=None):
@@ -1330,9 +1326,7 @@ class KCollabApp:
                     btn.config(bg=self.bgs["bg4"])
 
 
-
     def _updateChatStack(self, chat_data):
-        
         if isinstance(chat_data, list):
             # Clear existing data when receiving full list
             self.chatOrder = []
@@ -1358,6 +1352,15 @@ class KCollabApp:
         self.populateChat()
 
 
+    def _update_message_label_wraplength(self, event = None):
+        """Update the wraplength of the message labels in the chat."""
+        if hasattr(self, "msgCanvasFrame"):
+            width = getattr(self, 'chat_rightPanelFrame').winfo_width() * 0.7
+            for msg_frame in self.msgCanvasFrame.winfo_children():
+                bubble_frame = msg_frame.winfo_children()[0]
+                if bubble_frame.winfo_width() >200:
+                    for widget in bubble_frame.winfo_children():
+                        widget.config(wraplength=width)
 
 
 if __name__ == "__main__":

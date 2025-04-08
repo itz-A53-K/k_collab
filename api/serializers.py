@@ -28,16 +28,18 @@ class chatSerializer(serializers.ModelSerializer):
         
     
     def get_metaData(self, obj):
-        user = self.context['request'].user
+        user_id = self.context.get('user_id') or self.context['request'].user.id
         if obj.is_group_chat:
+            id = None
             name = f"{obj.team.name} (Group)"
             icon = str(obj.team.icon.url) if obj.team.icon else None
         else:
-            otherMember  = obj.members.exclude(id=user.id).first()
+            otherMember  = obj.members.exclude(id=user_id).first()
+            id = otherMember.id
             name = otherMember.name
             icon = str(otherMember.dp.url) if otherMember.dp else None
 
-        return {"name": str(name), "icon": icon}
+        return {"id": id, "name": str(name), "icon": icon}
         
     def get_last_msg(self, obj):
         last_msg = obj.messages.order_by('-timestamp').first()
