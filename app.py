@@ -132,17 +132,16 @@ class KCollabApp:
 
             print(f"Received new message! (Type: {dataType})")
 
-            if dataType in ['chatMsg', 'new_chat']:
+            if dataType in ['chatMsg']:
 
                 chat_data = data.get('chat_data')
                 msg_data = data.get('msg_data')
-
 
                 self._updateChatStack(chat_data)
 
                 if chat_data['id'] == self.openedChatID or self.current_receiver_id:
                     self.addMessage2Canvas(msg_data)
-                    # self.msgCanvas.update_idletasks()
+                    self.msgCanvas.update_idletasks()
                     self.msgCanvas.yview_moveto(1)
                 else:
                     # Notify user of new message ; like show a notification icon on respective chat and populateChat where latast msg chat is in top
@@ -203,38 +202,59 @@ class KCollabApp:
         hamburger_btn.pack(pady=10, padx=5, anchor="w")
 
         # Navbar buttons
-        navLinks = [("Dashboard", "📊"), ("Tasks", "📋"), ("Teams", "🧑‍👨‍👦"), ("Chats", "💬")]
+        navLinks = [
+            ("Dashboard", ("dashboard_gray", "dashboard_red")), 
+            ("Tasks", ("tasks_gray", "tasks_red")),
+            ("Teams", ("teams_gray", "teams_red")),
+            ("Chats", ("chats_gray", "chats_red"))
+        ]
+
         navLink_style = {
-            'font': ('Arial', 14), 
+            'font': ('Arial', 13), 
             'bg': self.navbar.cget("bg"), 
-            'fg': "white", 
-            'pady': 3, 
+            'fg': "white",  
             'bd': 0, 
-            'padx': 3, 
-            'anchor': "w", 
+            'padx': 10,  
             'justify': "left",
-            #"cursor":"hand2"
+            'height': 35,
         }
+
+        self.active_navLink = "Dashboard"
         self.nav_buttons = []
         self.nav_icons = []        
         
-        for text, icon in navLinks:
+        for text, (inactive_icon, active_icon) in navLinks:
             icon_btn = tk.Button(
                 self.navbar, 
-                text=icon, 
+                anchor=tk.CENTER,
+                width= 35,
                 command=lambda t=text: self.handleNavlinkClick(t), 
                 **navLink_style
             )
-            icon_btn.pack(pady=5, padx=5)
-            self.nav_icons.append(icon_btn)
-
+            icon_btn.pack(pady=15, padx=5, fill=None)
+            self.createTooltip(icon_btn, text)
+            
             text_btn = tk.Button(
-                self.navbar, 
-                text=f"{icon} {text}", 
+                self.navbar,
+                text=text, 
+                compound=tk.LEFT,
+                anchor=tk.W,
                 command=lambda t=text: self.handleNavlinkClick(t), 
                 **navLink_style
             )
-            self.nav_buttons.append(text_btn)
+
+            if text == self.active_navLink:
+                icon = self.icons.get(active_icon)
+                icon_btn.config(image = icon, bg= self.bgs["bg5"])
+                text_btn.config(image = icon, bg= self.bgs["bg5"])
+            else:
+                icon = self.icons.get(inactive_icon)
+                icon_btn.config(image = icon)
+                text_btn.config(image = icon)
+
+            self.nav_icons.append((icon_btn, text, inactive_icon, active_icon))
+            self.nav_buttons.append((text_btn, text, inactive_icon, active_icon))
+
 
         # Content area
         self.content = tk.Frame(self.mainFrame, bg="white")
@@ -308,21 +328,10 @@ class KCollabApp:
         # Close button
         closeBtn = tk.Button(headerFrame, text="✕", font=('Arial', 12, 'bold'), bg="red", fg="#fff", bd=0, padx=8, pady=4, command= closeModal)
         closeBtn.pack(side="right")
+        self.createTooltip(closeBtn, "Close")
 
-
-        inputStyle = {
-            "font": ('Arial', 12),
-            "width": 40,
-            "bg": "#fff",
-            "bd": 0,
-            "relief": "groove",
-        }
-        labelStyle = {
-            "font": ('Arial', 13),
-            "bg": formFrame.cget("bg"),
-            "fg": "#fff",
-            "anchor": "w"
-        }
+        inputStyle = {"font": ('Arial', 12), "width": 40, "bg": "#fff", "bd": 0, "relief": "groove"}
+        labelStyle = {"font": ('Arial', 13), "bg": formFrame.cget("bg"), "fg": "#fff", "anchor": "w" }
 
 
         # Task Title
@@ -437,10 +446,9 @@ class KCollabApp:
 
         closeBtn = tk.Button(headerFrame, text="✕", font=('Arial', 12, 'bold'), bg="red", fg="#fff", bd=0, padx=8, pady=4, command= closeModal)
         closeBtn.pack(side="right")
-
+        self.createTooltip(closeBtn, "Close")
 
         canvas, canvasFrame = self.createScrollableCanvas(frame, bgColor)
-
 
         def populateContacts(data):
             for user in data:
@@ -476,10 +484,8 @@ class KCollabApp:
                         '<Enter>': lambda e, item=userFrame: self.hov_enter(item, self.bgs["bg4_mid"]),
                         '<Leave>': lambda e, item=userFrame: self.hov_leave(item, bgColor),
                         '<Button-1>': lambda e,u_id = user['id'], name = user['name'], icon = user['dp']: [closeModal(), self.handleChatClick({'receiver_id': u_id, 'name': name, 'icon': icon }, newChat = True)], 
-                    }
-                    
+                    }                    
                     self.applyBinding_recursively(userFrame, bindings)
-
 
         self.asyncGetRequest("users/", populateContacts)
 
@@ -511,7 +517,7 @@ class KCollabApp:
             "defaultMsg": "Click on a chat to start messaging.",
         }
         frame = tk.Frame(self.content, bg="white")
-        self.layout1(frame, json.dumps(content))
+        self.layout_1(frame, json.dumps(content))
         return frame
 
 
@@ -528,18 +534,15 @@ class KCollabApp:
             "defaultMsg": "Click on a task to view details.",
         }
         frame = tk.Frame(self.content, bg="white")
-        self.layout1(frame, json.dumps(content))
+        self.layout_1(frame, json.dumps(content))
         return frame
 
 
     def createScrollableCanvas(self, parentFrame, bgColor):
-        """
-        Creates a scrollable canvas with an inner frame.
-        
+        """Creates a scrollable canvas with an inner frame.        
         Args:
             parentFrame: Parent frame to contain the canvas
-            bgColor: Background color for canvas and inner frame
-        
+            bgColor: Background color for canvas and inner frame        
         Returns:
             tuple: (canvas, canvasFrame) - The canvas, its inner frame 
         """
@@ -644,6 +647,19 @@ class KCollabApp:
 
     def handleNavlinkClick(self, section):
         self.clear_content()
+
+        for icon_btn, text, inactive_icon, active_icon in self.nav_icons:
+            if section.lower() == text.lower():
+                icon_btn.config(image=self.icons.get(active_icon), bg=self.bgs["bg5"])
+            else:
+                icon_btn.config(image=self.icons.get(inactive_icon), bg=self.bgs["bg1"])
+
+        for text_btn, text, inactive_icon, active_icon in self.nav_buttons:
+            if section.lower() == text.lower():
+                text_btn.config(image=self.icons.get(active_icon), bg=self.bgs["bg5"])
+            else:
+                text_btn.config(image=self.icons.get(inactive_icon), bg=self.bgs["bg1"])        
+
         if section.lower() == "dashboard":
             self.initDashboard()
         elif section.lower() == "chats":
@@ -651,6 +667,9 @@ class KCollabApp:
         elif section.lower() == "tasks":
             self.initTasks()
         
+        self.active_navLink= section
+        
+
     def handleChatClick(self, data, newChat = False):
         """Handle chat click event.
         Args:
@@ -665,14 +684,13 @@ class KCollabApp:
                 "icon": data.get('icon')
             }
             messages = None
-            self.current_receiver_id = data.get('receiver_id')
-            
-
+            self.current_receiver_id = data.get('receiver_id')           
         else:
             chat_id = data.get('chat').get('id')
             chatMeta = data.get('chat').get('metaData')
             messages = data.get('messages')
             self.current_receiver_id = None
+
 
         if newChat or self.openedChatID != chat_id:
             
@@ -734,9 +752,6 @@ class KCollabApp:
                     self.addMessage2Canvas(msg)                    
                 self.msgCanvas.after(100, lambda: self.msgCanvas.yview_moveto(1))
                 
-            
-
-
 
     def handleTaskClick(self, data, updateTask = False):
         task_id = data.get('id')
@@ -809,11 +824,8 @@ class KCollabApp:
 
             btn.pack(anchor="e", pady=10, padx=25, ipadx=10, ipady=5)
 
-
-
             def setDescWraplength(e, desc_label):                
-                desc_label.config(wraplength= taskDetailFrame.winfo_width() / 1.27)     
-
+                desc_label.config(wraplength= taskDetailFrame.winfo_width() / 1.27)
             setDescWraplength(None, descLabel)
 
             taskDetailFrame.bind("<Configure>", lambda event: setDescWraplength(event, descLabel))
@@ -831,7 +843,6 @@ class KCollabApp:
 #populate function
     def populateChat(self):
         panelBG = self.bgs["bg1_light"]
-        canvas = getattr(self,"chat_canvas")
         canvasFrame = getattr(self,"chat_canvasFrame")
         
         for widget in canvasFrame.winfo_children():
@@ -879,6 +890,8 @@ class KCollabApp:
 
             if 'sender' in lastMsg:
                 msgTxt = f"{lastMsg.get('sender')['name']}: {lastMsg.get('content')}" if chat['is_group_chat'] else lastMsg.get('content')
+                msgTxt = f"{msgTxt[:35]}..." if len(msgTxt) >35 else msgTxt
+
             lastMsg_label = tk.Label(chatFrame, text= msgTxt, bg=panelBG, font=('Arial', 9))
             lastMsg_label.pack(anchor="w")
 
@@ -895,26 +908,8 @@ class KCollabApp:
             self.applyBinding_recursively(chatFrame, bindings)          
             
 
-
-
-    def populateMsgs(self, messages):        
-        for msg in messages :
-            sender_id = msg['sender']['id']
-
-            if sender_id != self.user_id:
-                sender = msg['sender']['name'] 
-                align = 'left'
-            else:
-                sender ='You'
-                align = 'right'
-
-            self.addMessage2Canvas(msg)
-
-
-
     def populateTasks(self, tasks):  
         panelBG = self.bgs["bg1_light"]
-        canvas = getattr(self,"task_canvas")
         canvasFrame = getattr(self,"task_canvasFrame")
 
         for widget in canvasFrame.winfo_children():
@@ -948,16 +943,13 @@ class KCollabApp:
             tk.Label(taskFrame, text=f"Deadline: {deadline}", bg=panelBG, fg = color, font=('Arial', 9)).pack(anchor="w")
 
 
-            bindings ={
-                '<MouseWheel>': lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"),                
+            bindings ={               
                 '<Enter>': lambda e, frame=taskFrame: [self.hov_enter(frame, self.bgs["bg1_mid"])],
                 '<Leave>': lambda e, frame=taskFrame: [self.hov_leave(frame, panelBG)],
-                '<Button-1>': lambda e,t_id = task_id, isSubtask = task.get('is_subtask'): self.asyncGetRequest(
-                                    endpoint=f'tasks/{t_id}',
-                                    callback=self.handleTaskClick,
-                                    params={"isSubtask": isSubtask}
-                                ),
-
+                '<Button-1>': lambda e,t_id = task_id, isSubtask = task.get('is_subtask'):
+                            self.asyncGetRequest(
+                                endpoint=f'tasks/{t_id}', callback=self.handleTaskClick, params={"isSubtask": isSubtask}
+                            ),
             }
 
             self.applyBinding_recursively(taskFrame, bindings)
@@ -992,17 +984,20 @@ class KCollabApp:
     def toggle_navbar(self):
         """Expand or collapse navbar."""
         if self.is_navbar_expanded:
+            # Collapse navbar
             self.navbar.configure(width=50)
-            for btn in self.nav_buttons:
-                btn.pack_forget()
-            for icon in self.nav_icons:
-                icon.pack(pady=5, padx=5)
+            for text_btn, _, _, _ in self.nav_buttons:
+                text_btn.pack_forget()
+            for icon_btn, _, _, _ in self.nav_icons:
+                icon_btn.pack(pady=15, padx=5, fill= None)
         else:
+            # Expand navbar
             self.navbar.configure(width=200)
-            for icon in self.nav_icons:
-                icon.pack_forget()
-            for btn in self.nav_buttons:
-                btn.pack(pady=5, padx=5, fill=tk.X)
+            for icon_btn, _, _, _ in self.nav_icons:
+                icon_btn.pack_forget()
+            for text_btn, _, _, _ in self.nav_buttons:
+                text_btn.pack(pady=15, padx=5, fill=tk.X)
+
         self.is_navbar_expanded = not self.is_navbar_expanded
 
     def hov_enter(self, chat_widget, bgc):
@@ -1053,31 +1048,33 @@ class KCollabApp:
             bg= bubble_frame.cget("bg"), 
             font= ('Arial', 11), 
             padx= 5, 
-            justify= "left"
+            justify= "left",
+            wraplength= getattr(self,"chat_rightPanelFrame").winfo_width()*0.7
         )
         message_label.pack(anchor="w")
 
         time_label = tk.Label(bubble_frame, text= msgData["timestamp"], bg=bubble_frame.cget("bg"), fg="#374747", font=('Arial', 8, 'italic'), padx=5)
         time_label.pack(anchor="e")
 
-        def update_message_label_wraplength(event = None):
-            if message_label and message_label.winfo_exists():
-                message_label.config(wraplength= getattr(self,"chat_rightPanelFrame").winfo_width()*0.7)
-
-        self.root.bind("<Configure>", update_message_label_wraplength)
-
-        update_message_label_wraplength()
+        getattr(self, "chat_rightPanelFrame").bind("<Configure>", self._update_message_label_wraplength)
     
 
     def asyncGetRequest(self, endpoint: str, callback, params=None):
+        """ Asynchronous GET request to the API. Calls the provided callback function with the response data.
+
+        Args:
+            endpoint (str): API endpoint.
+            callback (function): Callback function to handle the response data.
+            params (dict, optional): Parameters for the GET request.
+        """
         def run():
             header = {"Authorization": f"Bearer {self.authToken}"}
-
             try:
                 resp = requests.get(self.apiURL + endpoint, headers=header, params=params)
                 if resp.status_code == 200:
                     respData = resp.json()
                     self.root.after(0, lambda: callback(respData))
+
             except requests.exceptions.RequestException as e:
                 print("Request error:", e)
 
@@ -1106,6 +1103,14 @@ class KCollabApp:
             'newTask': 'icons/newTask.png',
             'groupDP': 'icons/people.png',
             'userDP': 'icons/person.png',
+            'dashboard_red': 'icons/dashboard_red.png',
+            'dashboard_gray': 'icons/dashboard_gray.png',
+            'tasks_red': 'icons/task_red.png',
+            'tasks_gray': 'icons/task_gray.png',
+            'teams_red': 'icons/team_red.png',
+            'teams_gray': 'icons/team_gray.png',
+            'chats_red': 'icons/chat_red.png',
+            'chats_gray': 'icons/chat_gray.png',
             # Add more icons here as needed
         }
         
@@ -1124,25 +1129,53 @@ class KCollabApp:
         scrollbar.pack_forget()
 
 
-    def applyBinding_recursively(self, widget, bindings):
+    def applyBinding_recursively(self, widget, bindings: dict):
+        """Recursively applies key bindings to a widget and its children.."""
         for event, func in bindings.items():
             widget.bind(event, func)
             for child in widget.winfo_children():
                 self.applyBinding_recursively(child, bindings)
+
+
+    def createTooltip(self, widget, text, bgColor = "#333"):
+        """Creates a tooltip for a widget.
+        Args:
+            widget (tk.Widget): The widget to which the tooltip will be applied.
+            text (str): The text to display in the tooltip.
+            bgColor (str, optional): The background color of the tooltip. Defaults to "#333".
+        """
+            
+        tooltip = tk.Label(
+            self.root,
+            text=text,
+            bg=bgColor,
+            fg="white",
+            font=('Arial', 10),
+            padx=5,
+            pady=2,
+            borderwidth=1,
+            relief="solid"
+        )
+
+        def show_tooltip(event, label=tooltip, button=widget):
+            x = button.winfo_rootx() - self.root.winfo_rootx() + button.winfo_width()
+            y = button.winfo_rooty() - self.root.winfo_rooty() + button.winfo_height() + 3
+            label.place(x=x, y=y, anchor="n")
+
+        def hide_tooltip(event, label=tooltip):
+            label.place_forget()
+        
+        widget.bind("<Enter>", show_tooltip)
+        widget.bind("<Leave>", hide_tooltip)
+
+
 #RELOAD function 
-    def reloadChats(self):
-        self.clear_content()
-
-        self.chats_frame = self.createChatsUI()
-        self.initChats()
-
 
 
 
 #UI layout
 
-
-    def layout1(self, frame, content):
+    def layout_1(self, frame, content):
         content = json.loads(content)
         endpoint = content.get("api").get("endpoint")
         callback_name = content.get("api").get("callback")
@@ -1173,6 +1206,7 @@ class KCollabApp:
             )
             btn.config(command= lambda b=btn: self.initAddTaskModal(b))
             btn.pack(side=tk.RIGHT, anchor=tk.W, ipadx= 6, ipady = 6)
+            self.createTooltip(btn, "New Task")
 
         elif titleTxt.lower() in ["chat", "chats"]:
 
@@ -1188,6 +1222,7 @@ class KCollabApp:
 
             btn.pack(side=tk.RIGHT, anchor=tk.W, ipadx= 6, ipady = 6)
             btn.config(command= lambda b=btn: self.initContactModal(b))
+            self.createTooltip(btn, "New Chat")
 
         filterFrame = tk.Frame(leftPanalFrame, bg=panelBG, pady=5, padx=5)
         filterFrame.pack(side=tk.TOP, anchor=tk.W, fill=tk.X, pady=10)
@@ -1270,20 +1305,16 @@ class KCollabApp:
             self._updateL1_leftPanel("tasks/", "populateTasks", filterBtns, filter_val.lower())
         else:
             print("Failed to update task status")
-        
-
-        
+          
 
     def _updateL1_leftPanel(self, endpoint, callback_name, filterBtns, filter_val = None):
 
         if filter_val is not None:
             filter_val = filter_val.lower()
-            params = {
-                "filter": filter_val
-            }
+            params = {"filter": filter_val}
+
             if callback_name and endpoint:
                 callback_func = getattr(self, callback_name, None) 
-
                 if callable(callback_func):
                     self.asyncGetRequest(endpoint, callback_func, params)
             
@@ -1295,11 +1326,9 @@ class KCollabApp:
                     btn.config(bg=self.bgs["bg4"])
 
 
-
     def _updateChatStack(self, chat_data):
-        
         if isinstance(chat_data, list):
-        # Clear existing data when receiving full list
+            # Clear existing data when receiving full list
             self.chatOrder = []
             self.chatData = {}
             
@@ -1323,6 +1352,15 @@ class KCollabApp:
         self.populateChat()
 
 
+    def _update_message_label_wraplength(self, event = None):
+        """Update the wraplength of the message labels in the chat."""
+        if hasattr(self, "msgCanvasFrame"):
+            width = getattr(self, 'chat_rightPanelFrame').winfo_width() * 0.7
+            for msg_frame in self.msgCanvasFrame.winfo_children():
+                bubble_frame = msg_frame.winfo_children()[0]
+                if bubble_frame.winfo_width() >200:
+                    for widget in bubble_frame.winfo_children():
+                        widget.config(wraplength=width)
 
 
 if __name__ == "__main__":
