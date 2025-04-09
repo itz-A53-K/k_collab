@@ -80,9 +80,9 @@ class KCollabApp:
 
         return False
 
+
     def connectToWs(self):
         """Connect to WebSocket server in a seperate thread. And"""
-
         def runLoop():
             try:
                 asyncio.run(ws_handler())
@@ -123,11 +123,17 @@ class KCollabApp:
         try:
             data = json.loads(msg)
             msg_type = data.get('type')
+            print(f"Received message type: {msg_type}")
 
             if msg_type == 'chat_notification':
                 self.handle_chat_notification(data)
-            elif msg_type == 'task_notification':
-                self.handle_task_notification(data)
+            elif msg_type == 'user_task_notification':
+                self.handle_user_task_notification(data)
+            elif msg_type == 'team_task_notification':
+                self.handle_team_task_notification(data)
+            elif msg_type == 'task_create_confirmation':
+                print(data)
+
 
         except json.JSONDecodeError:
             print(f"Invalid JSON received: {msg}")
@@ -135,7 +141,7 @@ class KCollabApp:
             print(f"Error processing WebSocket message: {e}")
 
 
-# ws response handlers
+# WS response handlers
 
     def handle_chat_notification(self, data):
         """Handle chat notifications."""
@@ -144,7 +150,7 @@ class KCollabApp:
 
         self._updateChatStack(chat_data)
 
-        if chat_data['id'] == self.openedChatID or self.current_receiver_id:
+        if self.active_navLink == 'Chats' and (chat_data['id'] == self.openedChatID or self.current_receiver_id):
             self.addMessage2Canvas(msg_data)
             self.msgCanvas.update_idletasks()
             self.msgCanvas.yview_moveto(1)
@@ -152,9 +158,14 @@ class KCollabApp:
             # Notify user of new message ; like show a notification icon on respective chat and populateChat where latast msg chat is in top
             pass
 
-    def handle_task_notification(self, data):
+    def handle_user_task_notification(self, data):
         """Handle task notifications."""
-        task_data = data.get('task_data')
+        print(data)
+        pass
+
+    def handle_team_task_notification(self, data):
+        """Handle task notifications."""
+        print(data)
         pass
 
 
@@ -174,9 +185,6 @@ class KCollabApp:
                 asyncio.run(self.ws.send(json.dumps(msgData))) # Send message via WebSocket
                 self.msgInput.delete(0, tk.END)
 
-            except websockets.exceptions.ConnectionClosedOK:
-                print("WebSocket connection closed.")
-                self.ws = None
             except Exception as e:
                 print(f"Error sending message: {e}")
 
@@ -184,8 +192,19 @@ class KCollabApp:
     def createTask(self, data):
         """Create a new task via WebSocket."""
         print(data)
-        headers = {"Authorization": f"Bearer {self.authToken}"}
-        resp = requests.post(f"{self.apiURL}task/c/", json=data, headers=headers)
+        # headers = {"Authorization": f"Bearer {self.authToken}"}
+        # resp = requests.post(f"{self.apiURL}task/c/", json=data, headers=headers)
+        if data :
+            try:
+                msgData = {
+                    'type': "task_create",
+                    "task_data": data,
+                    "user_id": (self.user_id),
+                }
+                asyncio.run(self.ws.send(json.dumps(msgData))) # Send message via WebSocket
+
+            except Exception as e:
+                print(f"Error creating task: {e}")
 
 
 
@@ -768,7 +787,8 @@ class KCollabApp:
     def handleTaskClick(self, data, updateTask = False):
         task_id = data.get('id')
         if self.openedTaskID != task_id or updateTask :
-
+            
+            print(data)
             self.openedTaskID = task_id
 
             status = data.get('status')

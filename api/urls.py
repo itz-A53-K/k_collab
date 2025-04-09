@@ -15,6 +15,5 @@ urlpatterns = [
     path('teams/<uuid:team_id>/', views.teamContent.as_view(), name='team_content'),
 
     path('tasks/', views.task_subTaskList.as_view(), name='task_list'),
-    path('task/c/', views.taskCreate.as_view(), name='task_create'),
     path('tasks/<int:task_id>/', views.task_subTaskViewUpdate.as_view(), name='task_view_update'),
 ]
