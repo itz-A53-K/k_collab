@@ -34,6 +34,7 @@ class KCollabApp:
 
         self.openedTaskID = None
         self.openedChatID = None
+        self.current_receiver_id = None
 
         self.chatOrder = []
         self.chatData = {}
@@ -43,7 +44,7 @@ class KCollabApp:
         # self.isMsgUI_init = False
         self.baseURL = "http://127.0.0.1:8000"
         self.apiURL = f"{self.baseURL}/api/"
-        self.ws_url = "ws://127.0.0.1:8000/ws/chat/"
+        self.ws_url = "ws://127.0.0.1:8000/ws/"
 
 
         self.mainFrame = tk.Frame(self.root, bg= self.bgs["bg6"])
@@ -80,7 +81,7 @@ class KCollabApp:
         return False
 
     def connectToWs(self):
-        """Connects to the WebSocket server in a separate thread."""
+        """Connect to WebSocket server in a seperate thread. And"""
 
         def runLoop():
             try:
@@ -95,12 +96,16 @@ class KCollabApp:
                     print("WebSocket connection established.")
 
                     initialData = json.dumps({
+                        'type': "initial",
                         'user_id': self.user_id,
-                        'msg': "initial"
                     })
 
                     await self.ws.send(initialData)
-                    await self.receiveMessage()
+
+                    while True:
+                        msg = await self.ws.recv()
+                        await self.process_ws_message(msg)
+                    # await self.receiveMessage()
             
             except ConnectionRefusedError as e:
                 print(f"WebSocket connection failed: {e}")
@@ -113,55 +118,54 @@ class KCollabApp:
         wsThread.start()
 
 
-    async def receiveMessage(self):
-        try:
-            while True:
-                msg = await self.ws.recv()
-                self.process_message(msg)
-        except websockets.exceptions.ConnectionClosedOK:
-            print("WebSocket connection closed.")
-        except Exception as e:
-            print("Error receiving message:", e)
-
-
-    def process_message(self, msg):
+    async def process_ws_message(self, msg):
         """Process incoming WebSocket messages."""
         try:
             data = json.loads(msg)
-            dataType = data.get('type')
+            msg_type = data.get('type')
 
-            print(f"Received new message! (Type: {dataType})")
-
-            if dataType in ['chatMsg']:
-
-                chat_data = data.get('chat_data')
-                msg_data = data.get('msg_data')
-
-                self._updateChatStack(chat_data)
-
-                if chat_data['id'] == self.openedChatID or self.current_receiver_id:
-                    self.addMessage2Canvas(msg_data)
-                    self.msgCanvas.update_idletasks()
-                    self.msgCanvas.yview_moveto(1)
-                else:
-                    # Notify user of new message ; like show a notification icon on respective chat and populateChat where latast msg chat is in top
-                    pass
-                
-            elif dataType == 'new_task':
-                # Notify user/team for new task assigned
-                pass
+            if msg_type == 'chat_notification':
+                self.handle_chat_notification(data)
+            elif msg_type == 'task_notification':
+                self.handle_task_notification(data)
 
         except json.JSONDecodeError:
             print(f"Invalid JSON received: {msg}")
         except Exception as e:
-            print(f"Error processing message: {e}")
+            print(f"Error processing WebSocket message: {e}")
 
-    def send_message(self):
-        """Sends a message to the server via WebSocket."""
+
+# ws response handlers
+
+    def handle_chat_notification(self, data):
+        """Handle chat notifications."""
+        chat_data = data.get('chat_data')
+        msg_data = data.get('msg_data')
+
+        self._updateChatStack(chat_data)
+
+        if chat_data['id'] == self.openedChatID or self.current_receiver_id:
+            self.addMessage2Canvas(msg_data)
+            self.msgCanvas.update_idletasks()
+            self.msgCanvas.yview_moveto(1)
+        else:
+            # Notify user of new message ; like show a notification icon on respective chat and populateChat where latast msg chat is in top
+            pass
+
+    def handle_task_notification(self, data):
+        """Handle task notifications."""
+        task_data = data.get('task_data')
+        pass
+
+
+# WS create events
+    def createMessage(self):
+        """Create a new message via WebSocket."""
         msgInp = self.msgInput.get()
         if msgInp and self.ws and (self.openedChatID or self.current_receiver_id):
             try:
                 msgData = {
+                    'type': "message_create",
                     "msg": msgInp,
                     "chat_id": (self.openedChatID),
                     "user_id": (self.user_id),
@@ -175,6 +179,13 @@ class KCollabApp:
                 self.ws = None
             except Exception as e:
                 print(f"Error sending message: {e}")
+
+
+    def createTask(self, data):
+        """Create a new task via WebSocket."""
+        print(data)
+        headers = {"Authorization": f"Bearer {self.authToken}"}
+        resp = requests.post(f"{self.apiURL}task/c/", json=data, headers=headers)
 
 
 
@@ -604,6 +615,7 @@ class KCollabApp:
 
         return canvas, canvasFrame
 
+
 #click handle events
     def handleLoginClick(self):
         def showError(msg):
@@ -733,7 +745,7 @@ class KCollabApp:
             self.msgInput = tk.Entry(msgInputFrame, bg="#fff", font=('Arial', 12), name = "msgInput") 
             self.msgInput.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=3)
 
-            self.msgInput.bind("<Return>", lambda _: self.send_message())
+            self.msgInput.bind("<Return>", lambda _: self.createMessage())
 
             tk.Button(
                 msgInputFrame, 
@@ -742,7 +754,7 @@ class KCollabApp:
                 fg="#fff", 
                 font=('Arial', 12),
                 cursor= 'hand2',
-                command= self.send_message
+                command= self.createMessage
             ).pack(side=tk.RIGHT, padx=3, pady=5)
 
 
@@ -829,13 +841,6 @@ class KCollabApp:
             setDescWraplength(None, descLabel)
 
             taskDetailFrame.bind("<Configure>", lambda event: setDescWraplength(event, descLabel))
-
-
-    def createTask(self, data):
-        print(data)
-        headers = {"Authorization": f"Bearer {self.authToken}"}
-        resp = requests.post(f"{self.apiURL}task/c/", json=data, headers=headers)
-
 
 
 
