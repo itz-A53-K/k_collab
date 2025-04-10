@@ -170,3 +170,4 @@ The API is accessible through the `/api/` URL prefix.
 - Channels (for WebSocket support)
 - Daphne (ASGI server)
 - Tkinter (for desktop client)
+
