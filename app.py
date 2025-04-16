@@ -3,6 +3,7 @@ from tkinter import ttk
 from tkcalendar import Calendar
 from PIL import Image, ImageTk
 from io import BytesIO
+from django.utils.text import Truncator
 import threading, requests, json, re, os, time, datetime, asyncio, websockets
 
 
@@ -11,13 +12,14 @@ class KCollabApp:
     def __init__(self, root):
         print("App running ...")
         self.root = root
-        self.root.geometry("1000x600")
-        self.root.minsize(700, 400)
+        self.root.geometry("1200x700")
+        self.root.minsize(900, 500)
         self.root.title("K Collab")
         self.TOKEN_FILE = "kcollab_auth_token.json"
         self.tokenExpireTime = 5 * 86400 # 5 days in seconds ( 1 day = 86400 secs)
 
         self.bgs = {
+            "bg_pri": "#fff",
             "bg1": "#196C38",
             "bg1_mid": "#93e7b2",
             "bg1_mid2": "#7bcf9a",
@@ -34,6 +36,7 @@ class KCollabApp:
 
         self.openedTaskID = None
         self.openedChatID = None
+        self.current_receiver_id = None
 
         self.chatOrder = []
         self.chatData = {}
@@ -43,7 +46,7 @@ class KCollabApp:
         # self.isMsgUI_init = False
         self.baseURL = "http://127.0.0.1:8000"
         self.apiURL = f"{self.baseURL}/api/"
-        self.ws_url = "ws://127.0.0.1:8000/ws/chat/"
+        self.ws_url = "ws://127.0.0.1:8000/ws/"
 
 
         self.mainFrame = tk.Frame(self.root, bg= self.bgs["bg6"])
@@ -79,9 +82,9 @@ class KCollabApp:
 
         return False
 
-    def connectToWs(self):
-        """Connects to the WebSocket server in a separate thread."""
 
+    def connectToWs(self):
+        """Connect to WebSocket server in a seperate thread. And"""
         def runLoop():
             try:
                 asyncio.run(ws_handler())
@@ -95,12 +98,16 @@ class KCollabApp:
                     print("WebSocket connection established.")
 
                     initialData = json.dumps({
+                        'type': "initial",
                         'user_id': self.user_id,
-                        'msg': "initial"
                     })
 
                     await self.ws.send(initialData)
-                    await self.receiveMessage()
+
+                    while True:
+                        msg = await self.ws.recv()
+                        await self.process_ws_message(msg)
+                    # await self.receiveMessage()
             
             except ConnectionRefusedError as e:
                 print(f"WebSocket connection failed: {e}")
@@ -113,55 +120,65 @@ class KCollabApp:
         wsThread.start()
 
 
-    async def receiveMessage(self):
-        try:
-            while True:
-                msg = await self.ws.recv()
-                self.process_message(msg)
-        except websockets.exceptions.ConnectionClosedOK:
-            print("WebSocket connection closed.")
-        except Exception as e:
-            print("Error receiving message:", e)
-
-
-    def process_message(self, msg):
+    async def process_ws_message(self, msg):
         """Process incoming WebSocket messages."""
         try:
             data = json.loads(msg)
-            dataType = data.get('type')
+            msg_type = data.get('type')
+            print(f"Received message type: {msg_type}")
 
-            print(f"Received new message! (Type: {dataType})")
+            if msg_type == 'chat_notification':
+                self.handle_chat_notification(data)
+            elif msg_type == 'user_task_notification':
+                self.handle_user_task_notification(data)
+            elif msg_type == 'team_task_notification':
+                self.handle_team_task_notification(data)
+            elif msg_type == 'task_create_confirmation':
+                print(data)
 
-            if dataType in ['chatMsg']:
-
-                chat_data = data.get('chat_data')
-                msg_data = data.get('msg_data')
-
-                self._updateChatStack(chat_data)
-
-                if chat_data['id'] == self.openedChatID or self.current_receiver_id:
-                    self.addMessage2Canvas(msg_data)
-                    self.msgCanvas.update_idletasks()
-                    self.msgCanvas.yview_moveto(1)
-                else:
-                    # Notify user of new message ; like show a notification icon on respective chat and populateChat where latast msg chat is in top
-                    pass
-                
-            elif dataType == 'new_task':
-                # Notify user/team for new task assigned
-                pass
 
         except json.JSONDecodeError:
             print(f"Invalid JSON received: {msg}")
         except Exception as e:
-            print(f"Error processing message: {e}")
+            print(f"Error processing WebSocket message: {e}")
 
-    def send_message(self):
-        """Sends a message to the server via WebSocket."""
+
+# WS response handlers
+
+    def handle_chat_notification(self, data):
+        """Handle chat notifications."""
+        chat_data = data.get('chat_data')
+        msg_data = data.get('msg_data')
+
+        self._updateChatStack(chat_data)
+
+        if self.active_navLink == 'Chats' and (chat_data['id'] == self.openedChatID or self.current_receiver_id):
+            self.addMessage2Canvas(msg_data)
+            self.msgCanvas.update_idletasks()
+            self.msgCanvas.yview_moveto(1)
+        else:
+            # Notify user of new message ; like show a notification icon on respective chat and populateChat where latast msg chat is in top
+            pass
+
+    def handle_user_task_notification(self, data):
+        """Handle task notifications."""
+        print(data)
+        pass
+
+    def handle_team_task_notification(self, data):
+        """Handle task notifications."""
+        print(data)
+        pass
+
+
+# WS create events
+    def createMessage(self):
+        """Create a new message via WebSocket."""
         msgInp = self.msgInput.get()
         if msgInp and self.ws and (self.openedChatID or self.current_receiver_id):
             try:
                 msgData = {
+                    'type': "message_create",
                     "msg": msgInp,
                     "chat_id": (self.openedChatID),
                     "user_id": (self.user_id),
@@ -170,11 +187,23 @@ class KCollabApp:
                 asyncio.run(self.ws.send(json.dumps(msgData))) # Send message via WebSocket
                 self.msgInput.delete(0, tk.END)
 
-            except websockets.exceptions.ConnectionClosedOK:
-                print("WebSocket connection closed.")
-                self.ws = None
             except Exception as e:
                 print(f"Error sending message: {e}")
+
+
+    def createTask(self, data):
+        """Create a new task via WebSocket."""
+        if data :
+            try:
+                msgData = {
+                    'type': "task_create",
+                    "task_data": data,
+                    "user_id": (self.user_id),
+                }
+                asyncio.run(self.ws.send(json.dumps(msgData))) # Send message via WebSocket
+
+            except Exception as e:
+                print(f"Error creating task: {e}")
 
 
 
@@ -257,19 +286,20 @@ class KCollabApp:
 
 
         # Content area
-        self.content = tk.Frame(self.mainFrame, bg="white")
+        self.content = tk.Frame(self.mainFrame, bg= self.bgs["bg_pri"])
         self.content.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
         # Initialize sections
         self.dashboard_frame = self.createDashboardUI()
         self.chats_frame = self.createChatsUI()
         self.tasks_frame = self.createTasksUI()
+        self.teams_frame = self.createTeamsUI()
 
         # Show default section
-        self.initDashboard()
+        self.initDashboardUI()
 
     def initLoginUI(self):
-        self.loginFrame = tk.Frame(self.mainFrame, bg="#fff", padx=30, pady=30, bd=3, relief="flat")
+        self.loginFrame = tk.Frame(self.mainFrame, bg= self.bgs["bg_pri"], padx=30, pady=30, bd=3, relief="flat")
         self.loginFrame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
         tk.Label(self.loginFrame, text="Welcome to K Collab", font=("Arial", 26, "bold"), bg=self.loginFrame.cget("bg"), fg="#1D6F4C").pack()
@@ -300,14 +330,17 @@ class KCollabApp:
         self.loginBtn.pack(pady=20)
 
 
-    def initDashboard(self):
+    def initDashboardUI(self):
         self.dashboard_frame.pack(fill=tk.BOTH, expand=True)
     
-    def initChats(self):
+    def initChatsUI(self):
         self.chats_frame.pack(fill=tk.BOTH, expand=True)
 
-    def initTasks(self):
+    def initTasksUI(self):
         self.tasks_frame.pack(fill=tk.BOTH, expand=True)
+
+    def initTeamsUI(self):
+        self.teams_frame.pack(fill=tk.BOTH, expand=True)
 
 
     def initAddTaskModal(self, addTaskBtn):
@@ -399,7 +432,7 @@ class KCollabApp:
         dateInput.pack(side="left", ipady=5)
         dateInput.insert(0, datetime.date.today().strftime('%Y-%m-%d'))
         
-        calendarBtn = tk.Button(deadlineFrame, text="📅", font=('Arial', 12), width= 4, bg="#fff", command=lambda: self.show_calendar(dateInput))
+        calendarBtn = tk.Button(deadlineFrame, text="📅", font=('Arial', 12), width= 4, bg= self.bgs["bg_pri"], command=lambda: self.show_calendar(dateInput))
         calendarBtn.pack(side="left", padx=5)
 
         # Submit Button
@@ -456,17 +489,8 @@ class KCollabApp:
                     userFrame = tk.Frame(canvasFrame, bg=bgColor, cursor="hand2", pady=10, padx=10)
                     userFrame.pack(fill="x")
 
-                    photo = self.icons.get("userDP")
-                    if user['dp']: 
-                        url = f"{self.baseURL}{user['dp']}" 
-                        response = requests.get(url)
-                        if response.status_code == 200:
-                            image = Image.open(BytesIO(response.content))
-                            image = image.resize((35, 35), Image.Resampling.LANCZOS)  # Resize image
-                            photo = ImageTk.PhotoImage(image)
-
-                    #Keep reference to prevent garbage collection
-                    userFrame.dp = photo
+                    photo = self.load_and_resize_img("userDP", user.get('dp', None))         
+                    userFrame.dp = photo  #Keep reference to prevent garbage collection
                     
                     dp_label = tk.Label(userFrame, image=photo, bg=bgColor, bd= 1, relief='solid', height=35, width=35)
                     dp_label.pack(side="left", padx=(0, 10))
@@ -499,8 +523,29 @@ class KCollabApp:
 
     def createDashboardUI(self):
         """Create Dashboard UI."""
-        frame = tk.Frame(self.content, bg="white")
-        tk.Label(frame, text="Dashboard", font=('Arial', 24), bg="white").pack(pady=20)
+        bgPri = self.bgs["bg_pri"]    
+        frame = tk.Frame(self.content, bg= bgPri)
+
+        mainFrame = tk.Frame(frame, bg= "green", padx=10, pady=5)
+        mainFrame.pack(side=tk.LEFT, fill=tk.Y)
+
+        tk.Label(mainFrame, text= "Dashboard", bg= bgPri, font=("Arial", 16, "bold")).pack(anchor=tk.W)
+
+
+        notificationFrame = tk.Frame(frame, bg="red", padx=10, pady=5, width=400)
+        notificationFrame.pack(side=tk.RIGHT, fill=tk.Y)
+
+        tk.Label(notificationFrame, text= "Notifications", bg=bgPri, font=("Arial", 16, "bold")).pack(anchor=tk.W)
+
+        canvas, canvasFrame =self.createScrollableCanvas(notificationFrame, "gray")
+        
+
+
+        def updateMainFrameWidth():
+            frame_width = self.content.winfo_width() - 400
+            mainFrame.configure(width=frame_width)
+
+        self.content.bind("<Configure>", lambda e:updateMainFrameWidth())
         return frame
 
 
@@ -516,7 +561,23 @@ class KCollabApp:
             },
             "defaultMsg": "Click on a chat to start messaging.",
         }
-        frame = tk.Frame(self.content, bg="white")
+        frame = tk.Frame(self.content, bg= self.bgs["bg_pri"])
+        self.layout_1(frame, json.dumps(content))
+        return frame
+
+
+    def createTeamsUI(self):
+        """Create Teams UI."""
+        content = {
+            "title": "Teams",
+            "variablePrefix": "team",
+            "api":{
+                "endpoint": "teams/",
+                "callback": "populateTeams",
+            },
+            "defaultMsg": "Click on a team to see details.",
+        }
+        frame = tk.Frame(self.content, bg= self.bgs["bg_pri"])
         self.layout_1(frame, json.dumps(content))
         return frame
 
@@ -533,7 +594,7 @@ class KCollabApp:
             },
             "defaultMsg": "Click on a task to view details.",
         }
-        frame = tk.Frame(self.content, bg="white")
+        frame = tk.Frame(self.content, bg= self.bgs["bg_pri"])
         self.layout_1(frame, json.dumps(content))
         return frame
 
@@ -547,7 +608,7 @@ class KCollabApp:
             tuple: (canvas, canvasFrame) - The canvas, its inner frame 
         """
         canvas = tk.Canvas(parentFrame, bg=bgColor)
-        canvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        canvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=(10, 0))
 
         # Configure scrollbar style
         style = ttk.Style()
@@ -575,7 +636,7 @@ class KCollabApp:
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvasWindow, width=canvas.winfo_width() - 8))
 
-        # Configure canvas frame
+        # Configure canvas frame 
         canvasFrame.bind(
             "<Configure>",
             lambda e: canvas.config(
@@ -589,20 +650,23 @@ class KCollabApp:
                 canvas.after_cancel(canvas._scrollbar_timer)
             canvas._scrollbar_timer = canvas.after(1000, lambda: self.hideScrollbar(scrollbar))
 
+        def on_mousewheel(event):            
+            self.showScrollbar(scrollbar),
+            hide_scrollbar_after_delay(),
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
         def bind_scroll_to_widget(widget):
-            widget.bind('<MouseWheel>', lambda e: [
-                self.showScrollbar(scrollbar),
-                hide_scrollbar_after_delay(),
-                canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
-            ])
+            widget.bind('<MouseWheel>', lambda e: on_mousewheel(e))
 
             for child in widget.winfo_children():
                 bind_scroll_to_widget(child)
 
+        canvas.bind('<MouseWheel>', lambda e: on_mousewheel(e))
         canvasFrame.bind('<Map>', lambda e: bind_scroll_to_widget(e.widget) )
         
 
         return canvas, canvasFrame
+
 
 #click handle events
     def handleLoginClick(self):
@@ -661,11 +725,13 @@ class KCollabApp:
                 text_btn.config(image=self.icons.get(inactive_icon), bg=self.bgs["bg1"])        
 
         if section.lower() == "dashboard":
-            self.initDashboard()
+            self.initDashboardUI()
         elif section.lower() == "chats":
-            self.initChats()
+            self.initChatsUI()
         elif section.lower() == "tasks":
-            self.initTasks()
+            self.initTasksUI()
+        elif section.lower() == "teams":
+            self.initTeamsUI()
         
         self.active_navLink= section
         
@@ -693,7 +759,6 @@ class KCollabApp:
 
 
         if newChat or self.openedChatID != chat_id:
-            
 
             if hasattr(self, "activeChat"): 
                 # Remove the previous active chat's bgcolor
@@ -712,16 +777,21 @@ class KCollabApp:
                 widget.destroy()
                 # widget.pack_forget()
 
+            bg1_light = self.bgs["bg1_light"]
 
-            msgP_HeaderFrame = tk.Frame(msgPanelFrame, bg=self.bgs["bg1_light"], padx=5, pady=10)
-            msgP_HeaderFrame.pack(fill="x", side=tk.TOP)
+            headerFrame = tk.Frame(msgPanelFrame, bg=bg1_light, padx=5, pady=10)
+            headerFrame.pack(fill="x", side=tk.TOP)
 
-            tk.Label(
-                msgP_HeaderFrame, 
-                text=chatMeta.get('name'), 
-                bg=msgP_HeaderFrame.cget('bg'), 
-                font=('Arial', 11, 'bold')
-            ).pack(anchor="w")
+            photo = self.load_and_resize_img("userDP", chatMeta.get('icon', None))         
+            headerFrame.dp = photo  #Keep reference to prevent garbage collection
+            
+            dp_label = tk.Label(headerFrame, image=photo, bg=bg1_light, bd= 1, relief='solid', height=35, width=35)
+            dp_label.pack(side="left", padx=(0, 10))
+
+            infoFrame = tk.Frame(headerFrame, bg=bg1_light)
+            infoFrame.pack(side="left")
+
+            tk.Label(infoFrame, text=chatMeta.get('name'), bg=bg1_light, font=('Arial', 11, 'bold')).pack(anchor="w")
             
 
             self.msgCanvas, self.msgCanvasFrame = self.createScrollableCanvas(msgPanelFrame, "#fff")
@@ -730,10 +800,10 @@ class KCollabApp:
             msgInputFrame = tk.Frame(msgPanelFrame, bg=self.bgs["bg1_light"], padx=5, pady=5, height=60)
             msgInputFrame.pack(fill="x",side=tk.BOTTOM)
 
-            self.msgInput = tk.Entry(msgInputFrame, bg="#fff", font=('Arial', 12), name = "msgInput") 
+            self.msgInput = tk.Entry(msgInputFrame, bg= self.bgs["bg_pri"], font=('Arial', 12), name = "msgInput") 
             self.msgInput.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=3)
 
-            self.msgInput.bind("<Return>", lambda _: self.send_message())
+            self.msgInput.bind("<Return>", lambda _: self.createMessage())
 
             tk.Button(
                 msgInputFrame, 
@@ -742,7 +812,7 @@ class KCollabApp:
                 fg="#fff", 
                 font=('Arial', 12),
                 cursor= 'hand2',
-                command= self.send_message
+                command= self.createMessage
             ).pack(side=tk.RIGHT, padx=3, pady=5)
 
 
@@ -756,7 +826,8 @@ class KCollabApp:
     def handleTaskClick(self, data, updateTask = False):
         task_id = data.get('id')
         if self.openedTaskID != task_id or updateTask :
-
+            
+            print(data)
             self.openedTaskID = task_id
 
             status = data.get('status')
@@ -831,13 +902,40 @@ class KCollabApp:
             taskDetailFrame.bind("<Configure>", lambda event: setDescWraplength(event, descLabel))
 
 
-    def createTask(self, data):
-        print(data)
-        headers = {"Authorization": f"Bearer {self.authToken}"}
-        resp = requests.post(f"{self.apiURL}task/c/", json=data, headers=headers)
+    def handleTeamClick(self, data):
+        teamDetailFrame = getattr(self,"team_rightPanelFrame")
+        teamData = data.get('team')
+        taskData = data.get('tasks')
+        lastMsg = data.get('last_message')
+
+        for widget in teamDetailFrame.winfo_children():
+            widget.destroy()
+
+        bg1_light = self.bgs["bg1_light"]
+        headerFrame = tk.Frame(teamDetailFrame, bg=bg1_light, padx=5, pady=10)
+        headerFrame.pack(fill="x", side=tk.TOP)
+
+        photo = self.load_and_resize_img("teams_red", teamData.get('icon', None))
+        headerFrame.dp = photo
+        
+        dp_label = tk.Label(headerFrame, image=photo, bg=bg1_light, bd= 1, relief='solid', height=35, width=35)
+        dp_label.pack(side="left", padx=(0, 10))
+
+        infoFrame = tk.Frame(headerFrame, bg=bg1_light)
+        infoFrame.pack(side="left")
+
+        tk.Label(infoFrame, text=teamData.get('name'), bg=bg1_light, font=('Arial', 11, 'bold')).pack(anchor="w")
+
+        #member name string        
+        text = ', '.join(member.get('name') for member in teamData.get('members'))
+        text = self.truncate_chars(text, 160)
+
+        tk.Label(infoFrame, text= text, bg=bg1_light, font=('Arial', 9)).pack(anchor="w")
+        
 
 
 
+        
 
 
 #populate function
@@ -864,17 +962,9 @@ class KCollabApp:
             # print(meta)
             chatFrame = tk.Frame(canvasFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
             chatFrame.pack(fill="x")
-
             
-            photo = self.icons.get("groupDP") if chat['is_group_chat'] else self.icons.get("userDP")
-            if meta['icon'] :
-                url = f"{self.baseURL}{meta['icon']}" 
-                response = requests.get(url)
-                if response.status_code == 200:
-                    image = Image.open(BytesIO(response.content))
-                    image = image.resize((35, 35), Image.Resampling.LANCZOS)  # Resize image
-                    photo = ImageTk.PhotoImage(image)
-            
+            default_img = "groupDP" if chat['is_group_chat'] else "userDP"
+            photo = self.load_and_resize_img(default_img, meta.get('icon', None))
             chatFrame.dp = photo # reference to prevent garbage collection
             
             dp_label = tk.Label(chatFrame, image=photo, bg=panelBG, bd= 1, relief='solid', height=35, width=35)
@@ -883,14 +973,14 @@ class KCollabApp:
             info_frame = tk.Frame(chatFrame, bg=panelBG)
             info_frame.pack(fill="x")
 
-            name_label = tk.Label(info_frame, text=meta['name'], bg=panelBG, font=('Arial', 11))
+            name_label = tk.Label(info_frame, text=self.truncate_chars(meta['name'], 20), bg=panelBG, font=('Arial', 12))
             name_label.pack(anchor="w", side="left")
             timestamp_label = tk.Label(info_frame, text=lastMsg.get('timestamp'), bg=panelBG, font=('Arial', 8))
             timestamp_label.pack(anchor="w", side="right")
 
             if 'sender' in lastMsg:
                 msgTxt = f"{lastMsg.get('sender')['name']}: {lastMsg.get('content')}" if chat['is_group_chat'] else lastMsg.get('content')
-                msgTxt = f"{msgTxt[:35]}..." if len(msgTxt) >35 else msgTxt
+                msgTxt = self.truncate_chars(msgTxt, 40)
 
             lastMsg_label = tk.Label(chatFrame, text= msgTxt, bg=panelBG, font=('Arial', 9))
             lastMsg_label.pack(anchor="w")
@@ -939,7 +1029,7 @@ class KCollabApp:
             taskFrame.pack(fill="x")
             
             tk.Label(taskFrame, text=f"Task #{task_id}", bg=panelBG, font=('Arial', 10, "bold italic underline")).pack(anchor="w")
-            tk.Label(taskFrame, text=task.get('title'), bg=panelBG, font=('Arial', 13)).pack(anchor="w")
+            tk.Label(taskFrame, text=task.get('title'), bg=panelBG, font=('Arial', 12)).pack(anchor="w")
             tk.Label(taskFrame, text=f"Deadline: {deadline}", bg=panelBG, fg = color, font=('Arial', 9)).pack(anchor="w")
 
 
@@ -954,11 +1044,52 @@ class KCollabApp:
 
             self.applyBinding_recursively(taskFrame, bindings)
     
-    
-# helper events
+    def populateTeams(self, teams):
+        panelBG = self.bgs["bg1_light"]
+        canvasFrame = getattr(self,"team_canvasFrame")
+
+        for widget in canvasFrame.winfo_children():
+            widget.destroy()
+
+        if len(teams) == 0:
+            tk.Label(canvasFrame, text="You are not a team member yet.", bg=panelBG, font=('Arial', 13)).pack(anchor="center", pady=10)
+            return
+        
+        for team in teams:
+            team_id = team['id']
+            teamFrame = tk.Frame(canvasFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
+            teamFrame.pack(fill="x")
+
+            photo = self.load_and_resize_img("teams_red", team.get('icon', None))
+            teamFrame.dp = photo # reference to prevent garbage collection
+            
+            dp_label = tk.Label(teamFrame, image=photo, bg=panelBG, bd= 1, relief='solid', height=35, width=35)
+            dp_label.pack(side="left", padx=(0, 10))
+        
+            info_frame = tk.Frame(teamFrame, bg=panelBG)
+            info_frame.pack(fill="x")
+            
+            tk.Label(info_frame, text=team.get('name'), bg=panelBG, font=('Arial', 12)).pack(anchor="w")
+            
+            tk.Label(info_frame, text=f"Members: {len(team.get('members'))}", bg=panelBG, font=('Arial', 9)).pack(anchor="w")
+
+            bindings ={
+                '<Enter>': lambda e, frame=teamFrame: self.hov_enter(frame, self.bgs["bg1_mid"]),
+                '<Leave>': lambda e, frame=teamFrame: self.hov_leave(frame, panelBG),
+                '<Button-1>': lambda e, t_id= team.get('id'): self.asyncGetRequest(
+                                endpoint = f'teams/{t_id}/',
+                                callback = self.handleTeamClick
+                            ),
+            }
+
+            self.applyBinding_recursively(teamFrame, bindings)          
+
+
+# helper functions
     def clear_content(self):
         for widget in self.content.winfo_children():
             widget.pack_forget()
+
 
     def load_token(self):
         """Load token from a local file"""
@@ -975,11 +1106,13 @@ class KCollabApp:
             return None
         return token
 
+
     def save_token(self, token):
         """Save token to a local file"""
         token_data = {"token": token, "timestamp": time.time()}
         with open(self.TOKEN_FILE, "w") as f:
             json.dump(token_data, f)
+
 
     def toggle_navbar(self):
         """Expand or collapse navbar."""
@@ -1000,6 +1133,7 @@ class KCollabApp:
 
         self.is_navbar_expanded = not self.is_navbar_expanded
 
+
     def hov_enter(self, chat_widget, bgc):
         def add_config(widget):
             widget.config(bg=bgc)
@@ -1009,6 +1143,7 @@ class KCollabApp:
         if not hasattr(self, "activeChat") or chat_widget != self.activeChat:
             add_config(chat_widget)
 
+
     def hov_leave(self, chat_widget, bgc):
         def remove_config(widget):
             widget.config(bg=bgc)
@@ -1017,6 +1152,7 @@ class KCollabApp:
 
         if not hasattr(self, "activeChat") or chat_widget != self.activeChat:
             remove_config(chat_widget)
+
 
     def addMessage2Canvas(self, msgData):
         sender_id = msgData['sender']['id']
@@ -1028,7 +1164,7 @@ class KCollabApp:
             sender ='You'
             align = 'right'
             
-        msgFrame = tk.Frame(self.msgCanvasFrame, bg="white")
+        msgFrame = tk.Frame(self.msgCanvasFrame, bg= self.bgs["bg_pri"])
         msgFrame.pack(pady=5, padx=10, anchor="e" if align == "right" else "w")
 
         bubble_frame = tk.Frame(
@@ -1122,12 +1258,45 @@ class KCollabApp:
             print(f"Error loading icons: {e}")
 
 
+    def load_and_resize_img(self, default_img, path=None, size=(35,35)):
+        """Load and resize an image from a URL or use a default image.
+        Args:
+            default_img (str): Default image name.
+            path (str, optional): Path to the image. Defaults to None.
+            size (tuple, optional): Size to resize the image. Defaults to (35, 35).
+        Returns:
+            ImageTk.PhotoImage: Resized image.
+        """
+        try:
+            if path :
+                response = requests.get(f"{self.baseURL}{path}")
+                if response.status_code == 200:
+                    image = Image.open(BytesIO(response.content))
+                    image = image.resize(size, Image.Resampling.LANCZOS)  # Resize image
+                    photo = ImageTk.PhotoImage(image)
+            else:
+                photo = self.icons.get(default_img)
+            return photo
+
+        except Exception as e:
+            print(f"Error processing img: {e}")
+            return None
+
     def showScrollbar(self, scrollbar):
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
     def hideScrollbar(self, scrollbar):
         scrollbar.pack_forget()
 
+
+    def truncate_chars(self, text:str, width:int, placeholder="…"):
+        """Truncates a string to a specified width and adds a placeholder.
+        Returns:
+            str: The truncated text.
+        """
+        if len(text) <= width:
+            return text
+        return text[:width - len(placeholder)] + placeholder
 
     def applyBinding_recursively(self, widget, bindings: dict):
         """Recursively applies key bindings to a widget and its children.."""
@@ -1179,7 +1348,7 @@ class KCollabApp:
         content = json.loads(content)
         endpoint = content.get("api").get("endpoint")
         callback_name = content.get("api").get("callback")
-        filter_val = content.get("api").get("filter")
+        filter_val = content.get("api").get("filter", None)
 
         titleTxt = content.get("title")
 
@@ -1190,7 +1359,7 @@ class KCollabApp:
         leftPanalFrame.pack_propagate(False)
 
         fr = tk.Frame(leftPanalFrame, bg=panelBG)
-        fr.pack(side=tk.TOP, anchor=tk.W, fill=tk.X, padx=10)
+        fr.pack(side=tk.TOP, anchor=tk.W, fill=tk.X, padx=10, pady=(0,10))
         
         title = tk.Label(fr, text= titleTxt, bg=panelBG, font=("Arial", 16, "bold")).pack(side=tk.LEFT, anchor=tk.W)
 
@@ -1209,7 +1378,6 @@ class KCollabApp:
             self.createTooltip(btn, "New Task")
 
         elif titleTxt.lower() in ["chat", "chats"]:
-
             btn = tk.Button(
                 fr,
                 image= self.icons.get("newChat"),
@@ -1224,30 +1392,31 @@ class KCollabApp:
             btn.config(command= lambda b=btn: self.initContactModal(b))
             self.createTooltip(btn, "New Chat")
 
-        filterFrame = tk.Frame(leftPanalFrame, bg=panelBG, pady=5, padx=5)
-        filterFrame.pack(side=tk.TOP, anchor=tk.W, fill=tk.X, pady=10)
-
-        filterBtnStyle = {
-            'font': ('Arial', 10),
-            'bg': self.bgs["bg4"],
-            'fg': "#fff",
-            "activebackground": self.bgs['bg5'],
-            'activeforeground': "#fff",
-            'pady': 1,
-            'bd': 0,
-            'padx': 15,
-            'cursor': 'hand2'
-        }
         filterBtns = []
-        for filter in content.get("filters"):
-            btn = tk.Button(
-                filterFrame, 
-                text=filter, 
-                command= lambda f=filter: self._updateL1_leftPanel(endpoint, callback_name, filterBtns, f) , **filterBtnStyle)
-            btn.pack(side=tk.LEFT, padx=5)
-            filterBtns.append(btn)
-            
-        filterBtns[0].config(bg=self.bgs["bg5"])
+        if content.get("filters"):
+            filterFrame = tk.Frame(leftPanalFrame, bg=panelBG, pady=5, padx=5)
+            filterFrame.pack(side=tk.TOP, anchor=tk.W, fill=tk.X)
+
+            filterBtnStyle = {
+                'font': ('Arial', 10),
+                'bg': self.bgs["bg4"],
+                'fg': "#fff",
+                "activebackground": self.bgs['bg5'],
+                'activeforeground': "#fff",
+                'pady': 1,
+                'bd': 0,
+                'padx': 15,
+                'cursor': 'hand2'
+            }
+            for filter in content.get("filters"):
+                btn = tk.Button(
+                    filterFrame, 
+                    text=filter, 
+                    command= lambda f=filter: self._updateL1_leftPanel(endpoint, callback_name, filterBtns, f) , **filterBtnStyle)
+                btn.pack(side=tk.LEFT, padx=5)
+                filterBtns.append(btn)
+                
+            filterBtns[0].config(bg=self.bgs["bg5"])
 
         # create scrollable canvas
         canvas, canvasFrame = self.createScrollableCanvas(leftPanalFrame, panelBG)
@@ -1255,7 +1424,7 @@ class KCollabApp:
         # populate items in laft panel
         self._updateL1_leftPanel(endpoint, callback_name, filterBtns, filter_val)
 
-        rightPanelFrame = tk.Frame(frame, bg="white", padx=5, pady=5)
+        rightPanelFrame = tk.Frame(frame, bg= self.bgs["bg_pri"], padx=5, pady=5)
         rightPanelFrame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         defaultFrame = tk.Frame(rightPanelFrame)
@@ -1308,23 +1477,24 @@ class KCollabApp:
           
 
     def _updateL1_leftPanel(self, endpoint, callback_name, filterBtns, filter_val = None):
-
+        
         if filter_val is not None:
             filter_val = filter_val.lower()
             params = {"filter": filter_val}
-
-            if callback_name and endpoint:
-                callback_func = getattr(self, callback_name, None) 
-                if callable(callback_func):
-                    self.asyncGetRequest(endpoint, callback_func, params)
-            
             for btn in filterBtns:
                 # update active filter btn
                 if btn.cget("text").lower() == filter_val:
                     btn.config(bg=self.bgs["bg5"])
                 else:
                     btn.config(bg=self.bgs["bg4"])
+        else:
+            params = {}
 
+        if callback_name and endpoint:
+            callback_func = getattr(self, callback_name, None) 
+            if callable(callback_func):
+                self.asyncGetRequest(endpoint, callback_func, params)
+        
 
     def _updateChatStack(self, chat_data):
         if isinstance(chat_data, list):

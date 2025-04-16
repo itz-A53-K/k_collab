@@ -2,6 +2,27 @@
 
 K-Collab is a collaborative platform with a Django REST backend and Tkinter desktop client that includes user management, team management, task management, and real-time chat functionality using WebSockets.
 
+## Table of Contents
+- [Features](#features)
+- [Installation](#installation)
+- [Running the Application](#running-the-application)
+- [WebSocket Features](#websocket-features)
+- [API Endpoints](#api-endpoints)
+  - [Authentication](#authentication)
+  - [Teams](#teams)
+  - [Chats](#chats)
+  - [Tasks](#tasks)
+- [Models](#models)
+  - [User](#user)
+  - [Team](#team)
+  - [Task](#task)
+  - [SubTask](#subtask)
+  - [Chat](#chat)
+  - [Message](#message)
+- [Desktop Client Features](#desktop-client-features)
+- [Dependencies](#dependencies)
+
+
 ## Features
 
 - User Authentication with Token-based Authentication
@@ -16,6 +37,7 @@ K-Collab is a collaborative platform with a Django REST backend and Tkinter desk
 1. Clone the repository:
     ```bash
     git clone https://github.com/yourusername/k_collab.git
+    cd k_collab
     ```
 
 2. Create and activate virtual environment:
@@ -40,14 +62,16 @@ K-Collab is a collaborative platform with a Django REST backend and Tkinter desk
     python manage.py createsuperuser
     ```
 
-6. Start the Daphne server (for WebSocket support):
+## Running the Application
+
+1. Start the Daphne server (for WebSocket support):
     ```bash
     set DJANGO_SETTINGS_MODULE=k_collab.settings
     daphne k_collab.asgi:application
     <!-- daphne k_collab.asgi:application --bind 0.0.0.0 --port 8000 -->
     ```
 
-7. Launch desktop client:
+2. Launch desktop client:
     ```bash
     python app.py
     ```
@@ -61,6 +85,8 @@ K-Collab is a collaborative platform with a Django REST backend and Tkinter desk
 - WebSocket endpoint: `ws://localhost:8000/ws/chat/`
 
 ## API Endpoints
+
+The API is accessible through the `/api/` URL prefix.
 
 ### Authentication
 - **Login**: `POST /api/login/`
@@ -101,7 +127,7 @@ K-Collab is a collaborative platform with a Django REST backend and Tkinter desk
 
 ### User
 - Custom user model with email authentication
-- Fields: email, name, phone, dp, designation, ip_addr, port, isAdmin
+- Fields: email, name, phone, dp, designation, isAdmin
 
 ### Team
 - UUID primary key
@@ -138,8 +164,10 @@ K-Collab is a collaborative platform with a Django REST backend and Tkinter desk
 
 ## Dependencies
 
-- Django
+- Python 3.9+
+- Django 
 - Django REST Framework
 - Channels (for WebSocket support)
 - Daphne (ASGI server)
 - Tkinter (for desktop client)
+

@@ -22,9 +22,6 @@ class User(AbstractUser):
     dp =  models.ImageField(upload_to='user_dp', blank=True, null=True)
 
     designation = models.CharField(max_length=100, blank=True, null=True)
-
-    ip_addr = models.GenericIPAddressField(blank=True, null= True)
-    port = models.IntegerField(blank= True, null= True)
     
     isAdmin = models.BooleanField(default=False)
 

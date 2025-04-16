@@ -16,19 +16,6 @@ from itertools import chain
 import json
 
 
-class taskCreate(generics.CreateAPIView):
-    serializer_class = task_subTaskSerializer
-    permission_classes = [IsAuthenticated]
-
-    def create(self, request, *args, **kwargs):
-        user = request.user
-        data = request.data
-
-        print(data)
-
-        return Response(data, status=status.HTTP_200_OK)
-
-
 
 class task_subTaskViewUpdate(generics.RetrieveUpdateAPIView):
     serializer_class= task_subTask_detailSerializer
@@ -99,7 +86,10 @@ class teamListCreate(generics.ListCreateAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        teams = user.teams.all().order_by('-created_at')
+        if user.isAdmin:
+            teams = Team.objects.all().order_by('-created_at')
+        else:
+            teams = user.teams.all().order_by('-created_at')
         return teams
 
 

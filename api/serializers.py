@@ -50,10 +50,19 @@ class chatSerializer(serializers.ModelSerializer):
     
 
 class teamSerializer(serializers.ModelSerializer):
-    members = serializers.StringRelatedField(many=True)
+    members = serializers.SerializerMethodField()
     class Meta:
         model = Team
         fields = ['id', 'name', 'description', 'icon', 'members']
+    
+    def get_members(self, obj):
+        members = obj.members.all()
+        return userSerializer(members, many=True).data
+    
+    def to_representation(self, instance):
+        data = super().to_representation(instance)        
+        data['icon'] = str(instance.icon.url) if instance.icon else None
+        return data
 
 
 
