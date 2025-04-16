@@ -86,7 +86,10 @@ class teamListCreate(generics.ListCreateAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        teams = user.teams.all().order_by('-created_at')
+        if user.isAdmin:
+            teams = Team.objects.all().order_by('-created_at')
+        else:
+            teams = user.teams.all().order_by('-created_at')
         return teams
 
 
