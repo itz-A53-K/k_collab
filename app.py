@@ -1,11 +1,10 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from tkcalendar import Calendar
 from PIL import Image, ImageTk
 from io import BytesIO
 from django.utils.text import Truncator
 import threading, requests, json, re, os, time, datetime, asyncio, websockets
-
 
 
 class KCollabApp:
@@ -120,6 +119,18 @@ class KCollabApp:
         wsThread.start()
 
 
+    async def disconnectfromWS(self):
+        """Disconnect from the WebSocket server."""
+        if self.ws:
+            try:
+                await self.ws.close()
+                print("WebSocket connection closed.")
+            except Exception as e:
+                print(f"Error while closing WebSocket: {e}")
+            finally:
+                self.ws = None
+
+
     async def process_ws_message(self, msg):
         """Process incoming WebSocket messages."""
         try:
@@ -211,6 +222,7 @@ class KCollabApp:
     def initMainUI(self):
 
         self.connectToWs()
+        print("Login Success")
 
         # Navbar
         self.navbar = tk.Frame(self.mainFrame, width=50, bg=self.bgs["bg1"])
@@ -231,12 +243,24 @@ class KCollabApp:
         hamburger_btn.pack(pady=10, padx=5, anchor="w")
 
         # Navbar buttons
-        navLinks = [
-            ("Dashboard", ("dashboard_gray", "dashboard_red")), 
-            ("Tasks", ("tasks_gray", "tasks_red")),
-            ("Teams", ("teams_gray", "teams_red")),
-            ("Chats", ("chats_gray", "chats_red"))
-        ]
+        if getattr(self,"user_isAdmin"):
+            navLinks = [
+                ("Dashboard", ("dashboard_gray", "dashboard_red")),
+                ("Tasks", ("tasks_gray", "tasks_red")),
+                ("Teams", ("teams_gray", "teams_red")),
+                ("Chats", ("chats_gray", "chats_red")),
+                ("Create User", ("groupDP", "groupDP")),
+                ("Broadcast", ("groupDP", "groupDP")),
+                ("Logout", ("logout_gray", "logout_red"))
+            ]
+        else:
+            navLinks = [
+                ("Dashboard", ("dashboard_gray", "dashboard_red")), 
+                ("Tasks", ("tasks_gray", "tasks_red")),
+                ("Teams", ("teams_gray", "teams_red")),
+                ("Chats", ("chats_gray", "chats_red")),
+                ("Logout", ("", "logout_red"))
+            ]
 
         navLink_style = {
             'font': ('Arial', 13), 
@@ -277,7 +301,10 @@ class KCollabApp:
                 icon_btn.config(image = icon, bg= self.bgs["bg5"])
                 text_btn.config(image = icon, bg= self.bgs["bg5"])
             else:
-                icon = self.icons.get(inactive_icon)
+                if text == "Logout":
+                    icon = self.icons.get(active_icon)
+                else:
+                    icon = self.icons.get(inactive_icon)
                 icon_btn.config(image = icon)
                 text_btn.config(image = icon)
 
@@ -359,9 +386,10 @@ class KCollabApp:
         tk.Label(headerFrame, text="Add Task", font=('Arial', 16, 'bold'), bg=headerFrame.cget("bg"), fg="#fff").pack(side="left", pady=5)
 
         # Close button
-        closeBtn = tk.Button(headerFrame, text="✕", font=('Arial', 12, 'bold'), bg="red", fg="#fff", bd=0, padx=8, pady=4, command= closeModal)
+        closeBtn = tk.Button(headerFrame, text="✕", font=('Arial', 12, 'bold'), bg="red", fg="#fff", bd=0, padx=8, pady=4)
         closeBtn.pack(side="right")
-        self.createTooltip(closeBtn, "Close")
+        closeTooltip= self.createTooltip(closeBtn, "Close")
+        closeBtn.config(command= lambda: [closeTooltip.place_forget(), closeModal()])
 
         inputStyle = {"font": ('Arial', 12), "width": 40, "bg": "#fff", "bd": 0, "relief": "groove"}
         labelStyle = {"font": ('Arial', 13), "bg": formFrame.cget("bg"), "fg": "#fff", "anchor": "w" }
@@ -470,6 +498,7 @@ class KCollabApp:
         def closeModal():
             frame.destroy()
             newChatBtn.config(state="normal")
+            
 
         headerFrame = tk.Frame(frame, bg=frame.cget("bg"))
         headerFrame.pack(fill="x", pady=(0, 20))
@@ -477,9 +506,10 @@ class KCollabApp:
         # Title
         tk.Label(headerFrame, text="New Chat", font=('Arial', 16, 'bold'), bg=headerFrame.cget("bg"), fg="#fff").pack(side="left", pady=5)
 
-        closeBtn = tk.Button(headerFrame, text="✕", font=('Arial', 12, 'bold'), bg="red", fg="#fff", bd=0, padx=8, pady=4, command= closeModal)
+        closeBtn = tk.Button(headerFrame, text="✕", font=('Arial', 12, 'bold'), bg="red", fg="#fff", bd=0, padx=8, pady=4)
         closeBtn.pack(side="right")
-        self.createTooltip(closeBtn, "Close")
+        closeTooltip= self.createTooltip(closeBtn, "Close")
+        closeBtn.config(command= lambda: [closeTooltip.place_forget(), closeModal()])
 
         canvas, canvasFrame = self.createScrollableCanvas(frame, bgColor)
 
@@ -709,20 +739,69 @@ class KCollabApp:
             showError("An error occured. Try again")
             print("Error : ", e)
 
+
+    def handleLogoutClick(self):
+        async def _sessionCleanup():
+            try:
+                ## may not required to disconnect from ws for background notification
+                # await self.disconnectfromWS() # WebSocket cleanup
+
+                self.authToken = None
+                self.ws = None
+                self.user_id = None
+                self.chatOrder = []
+                self.chatData = {}
+                self.taskStack = []
+                self.openedTaskID = None
+
+                if os.path.exists(self.TOKEN_FILE):
+                    os.unlink(self.TOKEN_FILE) # Delete the token file
+
+                return True
+            
+            except Exception as e:
+                print(f"Error during session cleanup: {e}")
+                return False
+            
+            
+        if messagebox.askyesno("Logout", "Are you sure you want to logout?", parent=self.root, icon="warning"):
+            try:
+                resp = requests.post(self.apiURL + 'logout/', headers={"Authorization": f"Bearer {self.authToken}"})
+
+                if resp.status_code == 200 and asyncio.run(_sessionCleanup()):
+                    print("logout success")
+                else:
+                    raise Exception()
+
+
+            except Exception as e:
+                print("Error during logout: ", e)
+                messagebox.showerror("Logout Failed", "An error occured. Please Try again")
+
+            finally:
+                [w.destroy() for w in self.root.winfo_children()] # Clear the UI
+
+                # Reinitialize login screen
+                self.mainFrame = tk.Frame(self.root, bg= self.bgs["bg6"])
+                self.mainFrame.pack(fill=tk.BOTH, expand=True)            
+                self.authenticate()
+    
+
     def handleNavlinkClick(self, section):
-        self.clear_content()
+        if section.lower() != "logout":
+            self.clear_content()
 
-        for icon_btn, text, inactive_icon, active_icon in self.nav_icons:
-            if section.lower() == text.lower():
-                icon_btn.config(image=self.icons.get(active_icon), bg=self.bgs["bg5"])
-            else:
-                icon_btn.config(image=self.icons.get(inactive_icon), bg=self.bgs["bg1"])
+            for icon_btn, text, inactive_icon, active_icon in self.nav_icons:
+                if section.lower() == text.lower():
+                    icon_btn.config(image=self.icons.get(active_icon), bg=self.bgs["bg5"])
+                else:
+                    icon_btn.config(image=self.icons.get(inactive_icon), bg=self.bgs["bg1"])
 
-        for text_btn, text, inactive_icon, active_icon in self.nav_buttons:
-            if section.lower() == text.lower():
-                text_btn.config(image=self.icons.get(active_icon), bg=self.bgs["bg5"])
-            else:
-                text_btn.config(image=self.icons.get(inactive_icon), bg=self.bgs["bg1"])        
+            for text_btn, text, inactive_icon, active_icon in self.nav_buttons:
+                if section.lower() == text.lower():
+                    text_btn.config(image=self.icons.get(active_icon), bg=self.bgs["bg5"])
+                else:
+                    text_btn.config(image=self.icons.get(inactive_icon), bg=self.bgs["bg1"])        
 
         if section.lower() == "dashboard":
             self.initDashboardUI()
@@ -732,6 +811,8 @@ class KCollabApp:
             self.initTasksUI()
         elif section.lower() == "teams":
             self.initTeamsUI()
+        elif section.lower() == "logout":
+            self.handleLogoutClick()
         
         self.active_navLink= section
         
@@ -1247,6 +1328,7 @@ class KCollabApp:
             'teams_gray': 'icons/team_gray.png',
             'chats_red': 'icons/chat_red.png',
             'chats_gray': 'icons/chat_gray.png',
+            'logout_red': 'icons/logout_red.png',
             # Add more icons here as needed
         }
         
@@ -1336,6 +1418,8 @@ class KCollabApp:
         
         widget.bind("<Enter>", show_tooltip)
         widget.bind("<Leave>", hide_tooltip)
+
+        return tooltip
 
 
 #RELOAD function 
