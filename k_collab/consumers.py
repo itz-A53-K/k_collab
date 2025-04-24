@@ -202,9 +202,7 @@ class Consumer(AsyncWebsocketConsumer):
         if team_id:
             teamMembers = await self.getTeamMembers(team_id)
 
-            print(current_user_id)
-            if current_user_id in teamMembers:                
-                print("yes ", current_user_id)
+            if current_user_id in teamMembers:  
                 await self.send(text_data=json.dumps({
                     'type': 'team_task_notification',
                     'task_data': task_data,
@@ -301,8 +299,8 @@ class Consumer(AsyncWebsocketConsumer):
         try:
             task_data = data.get('task_data')
 
-            title = task_data.get('title')
-            description = task_data.get('desc')
+            title = task_data.get('title').strip()
+            description = task_data.get('desc').strip()
             deadline = task_data.get('deadline')
             assigned_user = task_data.get('assigned_user')
             assigned_team = task_data.get('assigned_team')
