@@ -69,10 +69,12 @@ class teamSerializer(serializers.ModelSerializer):
 class task_subTask_detailSerializer(serializers.ModelSerializer):
     is_subtask = serializers.SerializerMethodField()
     task_id = serializers.SerializerMethodField()
+    subtaskCount = serializers.SerializerMethodField()
+    progress = serializers.SerializerMethodField()
 
     class Meta:
         model = Task  # Start with Task, we will override as needed.
-        fields = ['id', 'title', 'description', 'deadline', 'status', 'is_subtask', 'task_id']
+        fields = ['id', 'title', 'description', 'deadline', 'status', 'is_subtask', 'task_id', 'subtaskCount', 'progress']
 
     def get_is_subtask(self, obj):
         return isinstance(obj, SubTask)
@@ -82,6 +84,21 @@ class task_subTask_detailSerializer(serializers.ModelSerializer):
             return obj.task.id
         return None
 
+    def get_subtaskCount(self, obj):
+        if isinstance(obj, Task):
+            return obj.subtasks.count()
+        return 0
+    
+    def get_progress(self, obj):
+        if isinstance(obj, Task):
+            total_subtasks = obj.subtasks.count()
+            completed_subtasks = obj.subtasks.filter(status='completed').count()
+            if total_subtasks == 0:
+                if obj.status == 'completed':
+                    return 100
+                return 0
+            return int((completed_subtasks / total_subtasks) * 100)
+        return None
     def to_representation(self, instance):
         if isinstance(instance, SubTask):
             self.Meta.model = SubTask
@@ -118,6 +135,7 @@ class messageSerializer(serializers.ModelSerializer):
             'id': obj.sender.id,
             'name': obj.sender.name,
             'email': obj.sender.email,
+            'dp': str(obj.sender.dp.url) if obj.sender.dp else None
         }
     
     def to_representation(self, instance):

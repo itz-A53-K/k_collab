@@ -8,7 +8,7 @@ import uuid
 
 # Create your models here.
 
-#email : abi@kcollab.in
+#email : admin@kcollab.in
 #password : 1234
 
 class User(AbstractUser):
@@ -26,7 +26,7 @@ class User(AbstractUser):
     isAdmin = models.BooleanField(default=False)
 
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = []
+    REQUIRED_FIELDS = ['name']
     objects = UserManager()
 
     def __str__(self):

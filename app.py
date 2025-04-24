@@ -28,8 +28,10 @@ class KCollabApp:
             "bg4": "#0FAE83",
             "bg4_mid": "#55a992",
             "bg5": "#2D3E50",
-            "bg6": "#848786",
+            "gray_1": "#848786",
+            "gray_2": "#dcdfde",
             "bg7": "#007bff",
+            "green_1": "#dcf8c6"
         }
 
 
@@ -48,7 +50,7 @@ class KCollabApp:
         self.ws_url = "ws://127.0.0.1:8000/ws/"
 
 
-        self.mainFrame = tk.Frame(self.root, bg= self.bgs["bg6"])
+        self.mainFrame = tk.Frame(self.root, bg= self.bgs["gray_1"])
         self.mainFrame.pack(fill=tk.BOTH, expand=True)
 
         self.load_icons()
@@ -183,23 +185,29 @@ class KCollabApp:
 
 
 # WS create events
-    def createMessage(self):
+    def createMessage(self, event = None):
         """Create a new message via WebSocket."""
-        msgInp = self.msgInput.get()
-        if msgInp and self.ws and (self.openedChatID or self.current_receiver_id):
-            try:
-                msgData = {
-                    'type': "message_create",
-                    "msg": msgInp,
-                    "chat_id": (self.openedChatID),
-                    "user_id": (self.user_id),
-                    "receiver_id" : (self.current_receiver_id)
-                }
-                asyncio.run(self.ws.send(json.dumps(msgData))) # Send message via WebSocket
-                self.msgInput.delete(0, tk.END)
+        if event and event.state & 0x1:  # Check if Shift key is pressed
+            self.msgInput.insert(tk.INSERT, "\n")
+            self.msgInput.configure(height=4)
+        else:
+            msgInp = self.msgInput.get("1.0", tk.END).strip()
+            if msgInp and msgInp!="" and self.ws and (self.openedChatID or self.current_receiver_id):
+                try:
+                    msgData = {
+                        'type': "message_create",
+                        "msg": msgInp,
+                        "chat_id": (self.openedChatID),
+                        "user_id": (self.user_id),
+                        "receiver_id" : (self.current_receiver_id)
+                    }
+                    asyncio.run(self.ws.send(json.dumps(msgData))) # Send message via WebSocket
+                    self.msgInput.delete("1.0", tk.END)
 
-            except Exception as e:
-                print(f"Error sending message: {e}")
+                except Exception as e:
+                    print(f"Error sending message: {e}")
+            
+        return 'break'  # Prevent default behavior of <Return> key
 
 
     def createTask(self, data):
@@ -473,13 +481,13 @@ class KCollabApp:
             pady=10, 
             bd=0, 
             width=25,
-            command=lambda: self.createTask({
+            command=lambda: [self.createTask({
                 'title': titleInput.get(),
                 'desc': descInput.get("1.0", tk.END),
                 'assigned_user': userCombo.get() if assignType.get() == "user" else None,
                 'assigned_team': teamCombo.get() if assignType.get() == "team" else None,
                 'deadline': dateInput.get()
-            })
+            }), closeModal() ]
         )
         submitBtn.pack(pady=20)
 
@@ -542,11 +550,6 @@ class KCollabApp:
                     self.applyBinding_recursively(userFrame, bindings)
 
         self.asyncGetRequest("users/", populateContacts)
-
-
-        
-
-
 
 
 #UI create events
@@ -782,7 +785,7 @@ class KCollabApp:
                 [w.destroy() for w in self.root.winfo_children()] # Clear the UI
 
                 # Reinitialize login screen
-                self.mainFrame = tk.Frame(self.root, bg= self.bgs["bg6"])
+                self.mainFrame = tk.Frame(self.root, bg= self.bgs["gray_1"])
                 self.mainFrame.pack(fill=tk.BOTH, expand=True)            
                 self.authenticate()
     
@@ -881,10 +884,10 @@ class KCollabApp:
             msgInputFrame = tk.Frame(msgPanelFrame, bg=self.bgs["bg1_light"], padx=5, pady=5, height=60)
             msgInputFrame.pack(fill="x",side=tk.BOTTOM)
 
-            self.msgInput = tk.Entry(msgInputFrame, bg= self.bgs["bg_pri"], font=('Arial', 12), name = "msgInput") 
+            self.msgInput = tk.Text(msgInputFrame, bg= self.bgs["bg_pri"], font=('Arial', 12), name = "msgInput", height=1) 
             self.msgInput.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=3)
 
-            self.msgInput.bind("<Return>", lambda _: self.createMessage())
+            self.msgInput.bind("<Return>", self.createMessage)
 
             tk.Button(
                 msgInputFrame, 
@@ -907,8 +910,6 @@ class KCollabApp:
     def handleTaskClick(self, data, updateTask = False):
         task_id = data.get('id')
         if self.openedTaskID != task_id or updateTask :
-            
-            print(data)
             self.openedTaskID = task_id
 
             status = data.get('status')
@@ -988,17 +989,18 @@ class KCollabApp:
         teamData = data.get('team')
         taskData = data.get('tasks')
         lastMsg = data.get('last_message')
+        bg1_light = self.bgs["bg1_light"]
 
         for widget in teamDetailFrame.winfo_children():
             widget.destroy()
 
-        bg1_light = self.bgs["bg1_light"]
+
         headerFrame = tk.Frame(teamDetailFrame, bg=bg1_light, padx=5, pady=10)
         headerFrame.pack(fill="x", side=tk.TOP)
 
         photo = self.load_and_resize_img("teams_red", teamData.get('icon', None))
         headerFrame.dp = photo
-        
+         
         dp_label = tk.Label(headerFrame, image=photo, bg=bg1_light, bd= 1, relief='solid', height=35, width=35)
         dp_label.pack(side="left", padx=(0, 10))
 
@@ -1010,9 +1012,121 @@ class KCollabApp:
         #member name string        
         text = ', '.join(member.get('name') for member in teamData.get('members'))
         text = self.truncate_chars(text, 160)
-
         tk.Label(infoFrame, text= text, bg=bg1_light, font=('Arial', 9)).pack(anchor="w")
+
+
+
+        descFrame = tk.Frame(teamDetailFrame, bg=self.bgs['gray_2'], padx=10, pady=10)
+        descFrame.pack(fill="x", side=tk.TOP)
+
+        desc_label= tk.Label(descFrame, text=teamData.get('description') , bg=descFrame.cget('bg'), font=('Arial', 11))
+        desc_label.pack(anchor="w")
+
+
+
+        canvas, canvasFrame = self.createScrollableCanvas(teamDetailFrame, self.bgs["bg_pri"])
+
+        for task in taskData:
+            taskBG = self.bgs["bg1_mid"]
+
+            taskFrame = tk.Frame(canvasFrame, bg= taskBG, padx=10, pady=10, bd=1, relief="solid", width=350)
+            taskFrame.pack(anchor="e", expand=True, pady=8)
+
+            f1 = tk.Frame(taskFrame, bg=taskBG, pady=5)
+            f1.pack(anchor="w", fill="x")
+
+            tk.Label(f1, text = 'Title: ', bg = taskBG, font = ('Arial', 12, 'bold')).pack(side=tk.LEFT, anchor="nw")
+            tk.Label(f1, text = task.get('title').capitalize(), bg = taskBG, font = ('Arial', 12)).pack(side=tk.LEFT)
+
+
+            f2 = tk.Frame(taskFrame, bg=taskBG, pady=3)
+            f2.pack(anchor="w", fill="x")
+
+            tk.Label(f2, text='Description:', bg=taskBG, font=('Arial', 12, 'bold')).pack(side=tk.LEFT, anchor="nw")
+            tk.Label(f2, text=task.get('description').capitalize(), bg=taskBG, font=('Arial', 12), justify="left", wraplength= taskFrame.winfo_reqwidth() / 0.7).pack(side=tk.LEFT)
+
+
+            f3 = tk.Frame(taskFrame, bg= taskBG, pady=3)
+            f3.pack(anchor="w", fill="x")
+
+            tk.Label(f3, text = 'Deadline: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT, anchor="nw")
+            tk.Label(f3, text = task.get('deadline'), bg = taskBG, font = ('Arial', 12), pady=5).pack(side=tk.LEFT)
+
+
+            f4 = tk.Frame(taskFrame, bg= taskBG, pady=3)
+            f4.pack(anchor="w", fill="x")
+
+            tk.Label(f4, text = 'Status: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT, anchor="nw")
+            tk.Label(f4, text = task.get('status').upper(), bg = taskBG, font = ('Arial', 12), pady=5).pack(side=tk.LEFT)
+            
+
+            fr5= tk.Frame(taskFrame, bg=taskBG, pady=3)
+            fr5.pack(anchor="w", fill="x")
+
+            tk.Label(fr5, text = 'No of SubTask: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT, anchor="nw")
+            tk.Label(fr5, text = task.get('subtaskCount'), bg = taskBG, font = ('Arial', 12), pady=5).pack(side=tk.LEFT)
+
+
+            fr6= tk.Frame(taskFrame, bg=taskBG, pady=3)
+            fr6.pack(anchor="w", fill="x")
+
+            tk.Label(fr6, text = 'Progress: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT)
+            ttk.Progressbar(
+                fr6, 
+                maximum=100, 
+                mode="determinate",
+                value=task.get('progress', 00), 
+                length=taskFrame.winfo_reqwidth() / 0.95
+            ).pack(side=tk.LEFT, pady=5, padx=5)
+            tk.Label(fr6, text=f"{task.get('progress', 00)}%", bg=taskBG, fg=self.bgs['bg5'], font=('Arial', 11, 'bold')).pack(side=tk.LEFT, pady=5)
+
+        canvas.after(100, lambda: canvas.yview_moveto(1))
+            
+
+
+
+
+
+
+        lastMsgFrame = tk.Frame(teamDetailFrame, height=60, padx=5, pady=5, bg= self.bgs["gray_1"])
+        lastMsgFrame.pack(fill="x", side=tk.BOTTOM, pady=(5, 0))
+
+        tk.Label(lastMsgFrame, text="Last Message", bg=lastMsgFrame.cget('bg'), font=('Arial', 14, "bold")).pack(anchor="center")
+
+        bubbleFrame = tk.Frame(lastMsgFrame, bg=self.bgs["green_1"], padx=5, pady=5, bd=1, relief="solid")
+        bubbleFrame.pack(fill="x", expand=True, side="left", pady=5)
+
+        if lastMsg:
+            senderData = lastMsg.get('sender')
+            photo = self.load_and_resize_img("userDP", senderData.get('dp'))
+            bubbleFrame.dp = photo
+
+            dp_label = tk.Label(bubbleFrame, image=photo, bg=bubbleFrame.cget('bg'), bd= 1, relief='solid', height=35, width=35)
+            dp_label.pack(side="left", anchor="nw")
+
+            fr = tk.Frame(bubbleFrame, bg=bubbleFrame.cget('bg'))
+            fr.pack(fill="x", side="top")
+
+            tk.Label(fr, text=senderData.get('name'), bg=bubbleFrame.cget('bg'), font=('Arial', 11, 'bold')).pack(anchor="w", side="left", padx=(5, 10))
+
+            tk.Label(fr, text=lastMsg.get('timestamp'), bg=bubbleFrame.cget('bg'), font=('Arial', 10, 'italic')).pack(anchor="w", side="left")
+
+
+            msgTxt = self.truncate_chars(lastMsg.get('content'), 180, ".....") 
+
+        else:
+            msgTxt = "No messages yet"
+
+        msg_label= tk.Label(bubbleFrame, text=msgTxt, bg=bubbleFrame.cget('bg'), font=('Arial', 11))
+        msg_label.pack( side="left", padx=5)
         
+        def update_desc_and_msg_wraplength(event = None):
+            width = teamDetailFrame.winfo_width() - 70
+            desc_label.config(wraplength=width)
+            msg_label.config(wraplength=width)
+            
+        teamDetailFrame.bind("<Configure>", update_desc_and_msg_wraplength)
+        update_desc_and_msg_wraplength()
 
 
 
@@ -1250,7 +1364,7 @@ class KCollabApp:
 
         bubble_frame = tk.Frame(
             msgFrame,
-            bg="#dcf8c6" if align == "right" else "#e6e6e6",
+            bg=self.bgs['green_1'] if align == "right" else self.bgs['gray_2'],
             bd=1,
             relief="solid"
         )
@@ -1265,7 +1379,7 @@ class KCollabApp:
             bg= bubble_frame.cget("bg"), 
             font= ('Arial', 11), 
             padx= 5, 
-            justify= "left",
+            # justify= "left",
             wraplength= getattr(self,"chat_rightPanelFrame").winfo_width()*0.7
         )
         message_label.pack(anchor="w")
@@ -1371,14 +1485,23 @@ class KCollabApp:
         scrollbar.pack_forget()
 
 
-    def truncate_chars(self, text:str, width:int, placeholder="…"):
-        """Truncates a string to a specified width and adds a placeholder.
+    def truncate_chars(self, text:str, no_of_char:int = 40, placeholder="…", remove_newlines=True):
+        """Truncates a string to a specified number of characters.
+        Args:
+            text (str): The input text.
+            no_of_char (int, optional): The maximum number of characters to include. Defaults to 40.
+            placeholder (str, optional): The placeholder to indicate truncation. Defaults to "…".   
+            remove_newlines (bool, optional): Whether to remove newlines from the text. Defaults to True.
         Returns:
             str: The truncated text.
         """
-        if len(text) <= width:
+        if remove_newlines:
+            text = text.replace("\n", " ")
+
+        if len(text) <= no_of_char:
             return text
-        return text[:width - len(placeholder)] + placeholder
+        return text[:no_of_char - len(placeholder)] + placeholder
+        
 
     def applyBinding_recursively(self, widget, bindings: dict):
         """Recursively applies key bindings to a widget and its children.."""
