@@ -1,10 +1,10 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 from tkcalendar import Calendar
 from PIL import Image, ImageTk
 from io import BytesIO
 from django.utils.text import Truncator
-import threading, requests, json, re, os, time, datetime, asyncio, websockets
+import threading, requests, json, re, os, time, datetime, asyncio, websockets, base64
 
 
 class KCollabApp:
@@ -146,7 +146,11 @@ class KCollabApp:
                 self.handle_user_task_notification(data)
             elif msg_type == 'team_task_notification':
                 self.handle_team_task_notification(data)
+            elif msg_type == 'newTeam_notification':
+                self.handle_team_notification(data)
             elif msg_type == 'task_create_confirmation':
+                print(data)
+            elif msg_type == 'team_create_confirmation':
                 print(data)
 
 
@@ -173,12 +177,17 @@ class KCollabApp:
             # Notify user of new message ; like show a notification icon on respective chat and populateChat where latast msg chat is in top
             pass
 
-    def handle_user_task_notification(self, data):
+    def handle_user_task_notification(self, data): 
         """Handle task notifications."""
         print(data)
         pass
 
     def handle_team_task_notification(self, data):
+        """Handle task notifications."""
+        print(data)
+        pass
+
+    def handle_team_notification(self, data):
         """Handle task notifications."""
         print(data)
         pass
@@ -194,14 +203,14 @@ class KCollabApp:
             msgInp = self.msgInput.get("1.0", tk.END).strip()
             if msgInp and msgInp!="" and self.ws and (self.openedChatID or self.current_receiver_id):
                 try:
-                    msgData = {
+                    dataToSend = {
                         'type': "message_create",
                         "msg": msgInp,
                         "chat_id": (self.openedChatID),
                         "user_id": (self.user_id),
                         "receiver_id" : (self.current_receiver_id)
                     }
-                    asyncio.run(self.ws.send(json.dumps(msgData))) # Send message via WebSocket
+                    asyncio.run(self.ws.send(json.dumps(dataToSend))) # Send message via WebSocket
                     self.msgInput.delete("1.0", tk.END)
 
                 except Exception as e:
@@ -214,16 +223,43 @@ class KCollabApp:
         """Create a new task via WebSocket."""
         if data :
             try:
-                msgData = {
+                dataToSend = {
                     'type': "task_create",
                     "task_data": data,
                     "user_id": (self.user_id),
                 }
-                asyncio.run(self.ws.send(json.dumps(msgData))) # Send message via WebSocket
+                asyncio.run(self.ws.send(json.dumps(dataToSend))) # Send message via WebSocket
 
             except Exception as e:
                 print(f"Error creating task: {e}")
 
+
+    def createTeam(self, data):
+        if data :
+            try:
+                iconPath = data.get('icon')
+                if iconPath not in ["", None]:
+                    with open(iconPath, 'rb') as f:
+                        icon_base64 = base64.b64encode(f.read()).decode('utf-8')
+
+                    icon_data = {
+                        "icon_base64": icon_base64,
+                        "icon_ext": iconPath.split(".")[-1] 
+                    }  
+                else:
+                    icon_data = None
+
+                data['icon'] = icon_data
+
+                dataToSend = {
+                    'type': "team_create",
+                    "team_data": data,
+                    "user_id": (self.user_id),
+                }
+                asyncio.run(self.ws.send(json.dumps(dataToSend))) # Send message via WebSocket
+
+            except Exception as e:
+                print(f"Error creating task: {e}")
 
 
 # initialization events
@@ -292,7 +328,7 @@ class KCollabApp:
                 command=lambda t=text: self.handleNavlinkClick(t), 
                 **navLink_style
             )
-            icon_btn.pack(pady=15, padx=5, fill=None)
+            icon_btn.pack(pady=10, padx=5, fill=None)
             self.createTooltip(icon_btn, text)
             
             text_btn = tk.Button(
@@ -319,6 +355,16 @@ class KCollabApp:
             self.nav_icons.append((icon_btn, text, inactive_icon, active_icon))
             self.nav_buttons.append((text_btn, text, inactive_icon, active_icon))
 
+        # profile button
+        profilePic = self.load_and_resize_img("userDP", self.user_dp)
+        self.navbar.dp = profilePic
+        profile_icon_btn = tk.Button(
+            self.navbar,
+            image=profilePic,
+            anchor=tk.CENTER,
+        )
+        profile_icon_btn.pack(pady=10, padx=5, side="bottom")
+        # self.nav_icons.append((profile_icon_btn, "Profile", inactive_icon, active_icon))
 
         # Content area
         self.content = tk.Frame(self.mainFrame, bg= self.bgs["bg_pri"])
@@ -379,7 +425,8 @@ class KCollabApp:
 
 
     def initAddTaskModal(self, addTaskBtn):
-        formFrame = tk.Frame(self.mainFrame, bg=self.bgs["bg1"], padx=30, pady=30, bd=3, relief="flat")
+        bgColor = self.bgs["bg4"]
+        formFrame = tk.Frame(self.mainFrame, bg=bgColor, padx=30, pady=20)
         formFrame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
         addTaskBtn.config(state="disabled")
@@ -387,11 +434,11 @@ class KCollabApp:
             formFrame.destroy()
             addTaskBtn.config(state="normal")
    
-        headerFrame = tk.Frame(formFrame, bg=formFrame.cget("bg"))
+        headerFrame = tk.Frame(formFrame, bg=bgColor)
         headerFrame.pack(fill="x", pady=(0, 20))
 
         # Title
-        tk.Label(headerFrame, text="Add Task", font=('Arial', 16, 'bold'), bg=headerFrame.cget("bg"), fg="#fff").pack(side="left", pady=5)
+        tk.Label(headerFrame, text="Add Task", font=('Arial', 16, 'bold'), bg=bgColor, fg="#fff").pack(side="left", pady=5)
 
         # Close button
         closeBtn = tk.Button(headerFrame, text="✕", font=('Arial', 12, 'bold'), bg="red", fg="#fff", bd=0, padx=8, pady=4)
@@ -400,7 +447,7 @@ class KCollabApp:
         closeBtn.config(command= lambda: [closeTooltip.place_forget(), closeModal()])
 
         inputStyle = {"font": ('Arial', 12), "width": 40, "bg": "#fff", "bd": 0, "relief": "groove"}
-        labelStyle = {"font": ('Arial', 13), "bg": formFrame.cget("bg"), "fg": "#fff", "anchor": "w" }
+        labelStyle = {"font": ('Arial', 13), "bg": bgColor, "fg": "#fff", "anchor": "w" }
 
 
         # Task Title
@@ -414,7 +461,7 @@ class KCollabApp:
         descInput.pack(pady=(5, 15))
 
         # Assignment Frame
-        assignFrame = tk.Frame(formFrame, bg=formFrame.cget("bg"))
+        assignFrame = tk.Frame(formFrame, bg=bgColor)
         assignFrame.pack(fill="x", pady=(0, 15))
 
         assignType = tk.StringVar(value="user")
@@ -445,7 +492,7 @@ class KCollabApp:
         tk.Radiobutton(assignFrame, text="Team", value="team", **radioStyle).pack(side="left")
 
 
-        comboFrame = tk.Frame(formFrame, bg=formFrame.cget("bg"))
+        comboFrame = tk.Frame(formFrame, bg=bgColor)
         comboFrame.pack(fill="x", pady=(0, 15))
 
         # User Combobox
@@ -460,7 +507,7 @@ class KCollabApp:
 
         # Deadline
         tk.Label(formFrame, text="Deadline *", **labelStyle).pack(anchor="w")
-        deadlineFrame = tk.Frame(formFrame, bg=formFrame.cget("bg"), width= 40)
+        deadlineFrame = tk.Frame(formFrame, bg=bgColor, width= 40)
         deadlineFrame.pack(fill="x", pady=(5, 15))
 
         # Date picker 
@@ -481,13 +528,7 @@ class KCollabApp:
             pady=10, 
             bd=0, 
             width=25,
-            command=lambda: [self.createTask({
-                'title': titleInput.get(),
-                'desc': descInput.get("1.0", tk.END),
-                'assigned_user': userCombo.get() if assignType.get() == "user" else None,
-                'assigned_team': teamCombo.get() if assignType.get() == "team" else None,
-                'deadline': dateInput.get()
-            }), closeModal() ]
+            command=lambda: validateForm()
         )
         submitBtn.pack(pady=20)
 
@@ -495,12 +536,33 @@ class KCollabApp:
         self.asyncGetRequest("users/", lambda data: userCombo.configure(values=[f"{u['name']} ({u['id']})" for u in data]))
         self.asyncGetRequest("teams/", lambda data: teamCombo.configure(values=[f"{t['name']} ({t['id']})" for t in data]))
 
+        def validateForm():
+            if not titleInput.get():
+                messagebox.showerror("Error", "Task title is required")
+            elif not descInput.get("1.0", tk.END).strip():
+                messagebox.showerror("Error", "Task description is required")
+            elif assignType.get() == "user" and userCombo.get() == "Select User":
+                messagebox.showerror("Error", "User or Team is required")
+            elif assignType.get() == "team" and teamCombo.get() == "Select Team":
+                messagebox.showerror("Error", "Team or User is required")                
+            elif not dateInput.get():
+                messagebox.showerror("Error", "Deadline is required")                
+            else:
+                self.createTask({
+                    'title': titleInput.get(),
+                    'desc': descInput.get("1.0", tk.END),
+                    'assigned_user': userCombo.get() if assignType.get() == "user" else None,
+                    'assigned_team': teamCombo.get() if assignType.get() == "team" else None,
+                    'deadline': dateInput.get()
+                })
+                closeModal()
 
     def initContactModal(self, newChatBtn):
         bgColor = self.bgs["bg4"]
         
         frame = tk.Frame(self.content, bg=bgColor, padx=10, pady=10)
         frame.place(x = newChatBtn.winfo_x(), y = newChatBtn.winfo_y()+newChatBtn.winfo_height()+10, width=350, height=600)
+        # frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER, width=350, height=600)
 
         newChatBtn.config(state="disabled")
         def closeModal():
@@ -550,6 +612,139 @@ class KCollabApp:
                     self.applyBinding_recursively(userFrame, bindings)
 
         self.asyncGetRequest("users/", populateContacts)
+
+
+    def initAddTeamModal(self, addTeamBtn):
+        bgColor = self.bgs["bg4"]
+        selected_users = set()
+        
+        formFrame = tk.Frame(self.content, bg=bgColor, padx=30, pady=20)
+        formFrame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+
+        addTeamBtn.config(state="disabled")
+        def closeModal():
+            formFrame.destroy()
+            addTeamBtn.config(state="normal")
+            
+
+        headerFrame = tk.Frame(formFrame, bg=bgColor)
+        headerFrame.pack(fill="x", pady=(0, 20))
+
+        # Title
+        tk.Label(headerFrame, text="Add Team", font=('Arial', 16, 'bold'), bg=bgColor, fg="#fff").pack(side="left", pady=5)
+
+        closeBtn = tk.Button(headerFrame, text="✕", font=('Arial', 12, 'bold'), bg="red", fg="#fff", bd=0, padx=8, pady=4)
+        closeBtn.pack(side="right")
+        closeTooltip= self.createTooltip(closeBtn, "Close")
+        closeBtn.config(command= lambda: [closeTooltip.place_forget(), closeModal()])
+
+        inputStyle = {"font": ('Arial', 12), "width": 40, "bg": "#fff", "bd": 0, "relief": "groove"}
+        labelStyle = {"font": ('Arial', 13), "bg": bgColor, "fg": "#fff", "anchor": "w" }
+
+
+        # Task Title
+        tk.Label(formFrame, text="Team Name *", **labelStyle).pack(anchor="w")
+        nameInput = tk.Entry(formFrame, **inputStyle)
+        nameInput.pack(pady=(5, 15), ipadx=5, ipady=5)
+
+        # Description
+        tk.Label(formFrame, text="Description *", **labelStyle).pack(anchor="w")
+        descInput = tk.Text(formFrame, height=4, **inputStyle)
+        descInput.pack(pady=(5, 15))
+
+        #profile photo
+        tk.Label(formFrame, text="Team Icon", **labelStyle).pack(anchor="w")
+        iconInput = tk.Button(formFrame, text="Select Photo", command=lambda: select_image(iconInput), **inputStyle)
+        iconInput.pack(pady=(5, 15))
+        iconInput.filePath = None
+
+
+        membersFrame = tk.Frame(formFrame, bg=formFrame.cget("bg"), height=200)
+        membersFrame.pack(fill="x", pady=(5, 15))
+        membersFrame.pack_propagate(False)
+
+        tk.Label(membersFrame, text="Select Team Members", **labelStyle).pack(anchor="w")
+
+        canvas, canvasFrame = self.createScrollableCanvas(membersFrame, bgColor)
+
+        submitBtn = tk.Button(
+            formFrame, 
+            text="Create Team", 
+            font=('Arial', 13),
+            bg=self.bgs["bg5"], 
+            fg="white", 
+            pady=10, 
+            bd=0, 
+            width=25,
+            command=lambda: validateForm()
+        )
+        submitBtn.pack(pady=20)
+
+        def populateUsers(data):
+            for user in data:
+                userFrame = tk.Frame(canvasFrame, bg=bgColor, cursor="hand2", pady=5, padx=10)
+                userFrame.pack(fill="x")
+                userFrame.selected = False
+
+                photo = self.load_and_resize_img("userDP", user.get('dp', None), (30, 30))         
+                userFrame.dp = photo
+
+                dp_label = tk.Label(userFrame, image=photo, bg=bgColor, bd= 1, relief='solid', height=30, width=30)
+                dp_label.pack(side="left", padx=(0, 10))
+
+                fr = tk.Frame(userFrame, bg=bgColor)
+                fr.pack(side="left")
+
+                name = tk.Label(fr, text=user['name'], font=('Arial', 11), bg=bgColor, fg="#fff")
+                name.pack(side="top", anchor='w')
+
+                email = tk.Label(fr, text=user['email'], font=('Arial', 11), bg=bgColor, fg="#fff")
+                email.pack(side="bottom", anchor='w')
+
+                bindings ={
+                    '<Button-1>': lambda e,u_id = user['id'], fr= userFrame: toggle_selection(u_id, fr), 
+                }                    
+                self.applyBinding_recursively(userFrame, bindings)
+
+        self.asyncGetRequest("users/", populateUsers, {"admin_include": True})
+
+
+        def select_image(button):
+            file_path = filedialog.askopenfilename(title="Select Image", filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp")])
+            if file_path:
+                button.config(text=self.truncate_chars(file_path, 30, placeholder="....", returnEnd = True))                
+                button.filePath=file_path
+
+        def toggle_selection(user_id, frame):
+            def setBG(widget, bgc):
+                widget.config(bg=bgc)
+                [setBG(child, bgc) for child in widget.winfo_children()]
+
+            if user_id in selected_users:
+                selected_users.remove(user_id)
+                frame.selected = True
+                setBG(frame, bgColor)
+                
+            else:
+                selected_users.add(user_id)
+                frame.selected = False 
+                setBG(frame, self.bgs["bg5"])
+
+        def validateForm():
+            if not nameInput.get():
+                messagebox.showerror("Error", "Team Name is required")
+            elif not descInput.get("1.0", tk.END).strip():
+                messagebox.showerror("Error", "Description is required")
+            elif not selected_users:
+                messagebox.showerror("Error", "Please select at least one team member")
+            else:
+                self.createTeam({
+                    'name': nameInput.get(),
+                    'desc': descInput.get("1.0", tk.END),
+                    'icon': iconInput.filePath,
+                    'member_ids': list(selected_users),  
+                })
+                closeModal() 
 
 
 #UI create events
@@ -674,7 +869,7 @@ class KCollabApp:
             "<Configure>",
             lambda e: canvas.config(
                 scrollregion=(0, 0, canvasFrame.winfo_reqwidth(), 
-                            max(self.root.winfo_height() - 100, canvasFrame.winfo_reqheight()))
+                            max(canvas.winfo_height(), canvasFrame.winfo_reqheight()))
             )
         )
 
@@ -1023,7 +1218,6 @@ class KCollabApp:
         desc_label.pack(anchor="w")
 
 
-
         canvas, canvasFrame = self.createScrollableCanvas(teamDetailFrame, self.bgs["bg_pri"])
 
         for task in taskData:
@@ -1144,8 +1338,6 @@ class KCollabApp:
         
         if not self.chatOrder:
             tk.Label(canvasFrame, bg = panelBG, text = "Your Chatlist is Empty.", font=('Arial', 13)).pack(padx=5, pady=10)
-
-            tk.Button(canvasFrame, text="Start a Chat", bg=self.bgs['bg4'], fg="#fff", font=('Arial', 11)).pack(ipadx=5, ipady=5, pady=5, padx=5)
             return
 
         for chat_id in self.chatOrder:
@@ -1192,7 +1384,6 @@ class KCollabApp:
 
             self.applyBinding_recursively(chatFrame, bindings)          
             
-
     def populateTasks(self, tasks):  
         panelBG = self.bgs["bg1_light"]
         canvasFrame = getattr(self,"task_canvasFrame")
@@ -1239,7 +1430,7 @@ class KCollabApp:
 
             self.applyBinding_recursively(taskFrame, bindings)
     
-    def populateTeams(self, teams):
+    def populateTeams(self, teams): 
         panelBG = self.bgs["bg1_light"]
         canvasFrame = getattr(self,"team_canvasFrame")
 
@@ -1317,14 +1508,14 @@ class KCollabApp:
             for text_btn, _, _, _ in self.nav_buttons:
                 text_btn.pack_forget()
             for icon_btn, _, _, _ in self.nav_icons:
-                icon_btn.pack(pady=15, padx=5, fill= None)
+                icon_btn.pack(pady=10, padx=5, fill= None)
         else:
             # Expand navbar
             self.navbar.configure(width=200)
             for icon_btn, _, _, _ in self.nav_icons:
                 icon_btn.pack_forget()
             for text_btn, _, _, _ in self.nav_buttons:
-                text_btn.pack(pady=15, padx=5, fill=tk.X)
+                text_btn.pack(pady=10, padx=5, fill=tk.X)
 
         self.is_navbar_expanded = not self.is_navbar_expanded
 
@@ -1432,6 +1623,7 @@ class KCollabApp:
         icon_files = {
             'newChat': 'icons/newChat.png',
             'newTask': 'icons/newTask.png',
+            'newTeam': 'icons/newTeam.png',
             'groupDP': 'icons/people.png',
             'userDP': 'icons/person.png',
             'dashboard_red': 'icons/dashboard_red.png',
@@ -1485,13 +1677,14 @@ class KCollabApp:
         scrollbar.pack_forget()
 
 
-    def truncate_chars(self, text:str, no_of_char:int = 40, placeholder="…", remove_newlines=True):
+    def truncate_chars(self, text:str, no_of_char:int = 40, placeholder="…", remove_newlines=True, returnEnd = False):
         """Truncates a string to a specified number of characters.
         Args:
             text (str): The input text.
             no_of_char (int, optional): The maximum number of characters to include. Defaults to 40.
             placeholder (str, optional): The placeholder to indicate truncation. Defaults to "…".   
             remove_newlines (bool, optional): Whether to remove newlines from the text. Defaults to True.
+            returnEnd (bool, optional): Whether to return the end of the string. Defaults to False.
         Returns:
             str: The truncated text.
         """
@@ -1500,6 +1693,8 @@ class KCollabApp:
 
         if len(text) <= no_of_char:
             return text
+        if returnEnd:
+            return placeholder + text[-no_of_char:]
         return text[:no_of_char - len(placeholder)] + placeholder
         
 
@@ -1598,6 +1793,21 @@ class KCollabApp:
             btn.pack(side=tk.RIGHT, anchor=tk.W, ipadx= 6, ipady = 6)
             btn.config(command= lambda b=btn: self.initContactModal(b))
             self.createTooltip(btn, "New Chat")
+
+        elif titleTxt.lower() in ["team", "teams"]:
+            btn = tk.Button(
+                fr,
+                image= self.icons.get("newTeam"),
+                bg=self.bgs["bg4"],
+                activebackground=self.bgs['bg1_mid2'],
+                bd=0,
+                pady=4,
+                cursor="hand2",
+            )
+
+            btn.pack(side=tk.RIGHT, anchor=tk.W, ipadx= 6, ipady = 6)
+            btn.config(command= lambda b=btn: self.initAddTeamModal(b))
+            self.createTooltip(btn, "New Team")
 
         filterBtns = []
         if content.get("filters"):

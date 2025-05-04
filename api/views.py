@@ -80,7 +80,7 @@ class task_subTaskList(generics.ListAPIView):
 
 
 
-class teamListCreate(generics.ListCreateAPIView):
+class teamList(generics.ListAPIView):
     serializer_class = teamSerializer
     permission_classes = [IsAuthenticated]
 
@@ -144,17 +144,16 @@ class chatList(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         filter = self.request.query_params.get('filter', 'all').lower()
+
+        base_query = user.chats.all()
         
         if filter == 'groups':
-            chats = user.chats.filter(is_group_chat = True).annotate(
-                last_message_time=Max('messages__timestamp')  # Get the max timestamp
-            ).order_by('-last_message_time')
-        else:
-            chats = user.chats.annotate(
-                last_message_time=Max('messages__timestamp')
-            ).order_by('-last_message_time')
+            base_query = base_query.filter(is_group_chat = True)
         
-        return chats
+        return base_query.annotate(
+                last_message_time=Max('messages__timestamp')
+            ).order_by('-last_message_time', '-id')
+        
     
 
 class userList(generics.ListAPIView):
@@ -163,7 +162,11 @@ class userList(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        qs = User.objects.exclude(id=user.id)
+        admin_include = self.request.query_params.get('admin_include', False)
+        if admin_include:
+            qs = User.objects.all()
+        else:
+            qs = User.objects.exclude(id=user.id)
         return qs
 
 
