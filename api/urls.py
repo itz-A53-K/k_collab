@@ -11,7 +11,7 @@ urlpatterns = [
     path('chats/', views.chatList.as_view(), name='chat_list'),
     path('chats/<uuid:chat_id>/', views.chatDetail.as_view(), name='chat_content'),
 
-    path('teams/', views.teamListCreate.as_view(), name='team_list_create'),
+    path('teams/', views.teamList.as_view(), name='team_list_create'),
     path('teams/<uuid:team_id>/', views.teamContent.as_view(), name='team_content'),
 
     path('tasks/', views.task_subTaskList.as_view(), name='task_list'),

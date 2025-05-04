@@ -1,9 +1,10 @@
-import json
+import json, base64
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
 from datetime import datetime
 from api import models, serializers
+from django.core.files.base import ContentFile
 
 User = get_user_model()
 
@@ -52,6 +53,7 @@ class Consumer(AsyncWebsocketConsumer):
                 'initial': self.handle_initial_connection,
                 'message_create': self.handle_message_create,
                 'task_create': self.handle_task_create,
+                'team_create': self.handle_team_create,
             }
 
             handler = handlers.get(msg_type)
@@ -137,6 +139,25 @@ class Consumer(AsyncWebsocketConsumer):
         )
 
 
+    async def handle_team_create(self, data, sender_id):
+       
+        team_data= await self.teamCreate_DB(data)
+
+        if not team_data:
+            return
+        
+        
+        # Send notification to all relevant users
+        await self.channel_layer.group_send(
+            "users",
+            {
+                "type": "WS_teamNotification",
+                "team_data": team_data,
+                'creator_id': sender_id,
+            }
+        )
+
+
 
 
 
@@ -183,6 +204,7 @@ class Consumer(AsyncWebsocketConsumer):
         creator_id = event.get('creator_id')
 
         if creator_id and current_user_id == str(creator_id):
+            # Send confirmation to the creator
             await self.send(text_data=json.dumps({
                 'type': 'task_create_confirmation',
                 'task_data': task_data,
@@ -193,6 +215,7 @@ class Consumer(AsyncWebsocketConsumer):
         team_id = task_data.get('assigned_team_id')
 
         if user_id and current_user_id == str(user_id):
+            # Send notification to the assigned user
             await self.send(text_data=json.dumps({
                 'type': 'user_task_notification',
                 'task_data': task_data,
@@ -200,13 +223,38 @@ class Consumer(AsyncWebsocketConsumer):
             return
         
         if team_id:
-            teamMembers = await self.getTeamMembers(team_id)
+            teamMembers = await self.getTeamMemberIDs(team_id)
 
             if current_user_id in teamMembers:  
+                # Send notification to all team members
                 await self.send(text_data=json.dumps({
                     'type': 'team_task_notification',
                     'task_data': task_data,
                 }))
+
+    async def WS_teamNotification(self, event):
+        current_user_id = str(self.scope['user'].id)
+
+        team_data = event['team_data']
+        creator_id = event.get('creator_id')
+
+        if creator_id and current_user_id == str(creator_id):
+            # Send confirmation to the creator
+            await self.send(text_data=json.dumps({
+                'type': 'team_create_confirmation',
+                'team_data': team_data,
+                'created': True
+            }))
+            
+        teamMemberIDs = [member['id'] for member in team_data.get('members', [])]
+        print(teamMemberIDs)
+
+        if current_user_id in teamMemberIDs:  
+            # Send notification to all team members
+            await self.send(text_data=json.dumps({
+                'type': 'newTeam_notification',
+                'team_data': team_data,
+            }))
 
 
 
@@ -339,6 +387,52 @@ class Consumer(AsyncWebsocketConsumer):
 
 
     @database_sync_to_async
+    def teamCreate_DB(self, data):
+        """Create team to the database and returns the team data.
+        Args:
+            data (dict): The data containing team details.
+        Returns:
+            dict: Serialized team data.
+        """
+        try:
+            team_data = data.get('team_data')
+
+            title = team_data.get('name').strip()
+            description = team_data.get('desc').strip()
+            icon_data = team_data.get('icon')
+            member_ids = team_data.get('member_ids', [])
+
+            # Decode base64 icon if present
+            icon_file = None
+            if icon_data:
+                icon_base64 = icon_data.get('icon_base64')
+                icon_ext = icon_data.get('icon_ext')
+
+                if "base64," in icon_base64:
+                    icon_base64 = icon_base64.split("base64,")[1]
+
+                image_data = base64.b64decode(icon_base64)
+                icon_file = ContentFile(image_data,  name=f"team_icon.{icon_ext}")
+
+            members = User.objects.filter(id__in=member_ids)
+
+            team = models.Team.objects.create(
+                name=title,
+                description=description,
+                icon=icon_file,
+            )
+            team.members.set(members)
+
+            return serializers.teamSerializer(team).data             
+        
+        except Exception as e:
+            print(f"error: {str(e)}")
+            return None
+
+
+
+
+    @database_sync_to_async
     def getUser(self, user_id):
         try:
             return User.objects.get(id=user_id)
@@ -354,7 +448,7 @@ class Consumer(AsyncWebsocketConsumer):
     
     
     @database_sync_to_async
-    def getTeamMembers(self, team_id):
+    def getTeamMemberIDs(self, team_id):
         try:
             team = models.Team.objects.prefetch_related('members').get(id=team_id)
             return {str(member.id) for member in team.members.all()}
