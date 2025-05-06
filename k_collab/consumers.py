@@ -246,10 +246,9 @@ class Consumer(AsyncWebsocketConsumer):
                 'created': True
             }))
             
-        teamMemberIDs = [member['id'] for member in team_data.get('members', [])]
-        print(teamMemberIDs)
+        teamMemberIDs = [str(member['id']) for member in team_data.get('members', [])]
 
-        if current_user_id in teamMemberIDs:  
+        if current_user_id in teamMemberIDs:
             # Send notification to all team members
             await self.send(text_data=json.dumps({
                 'type': 'newTeam_notification',
