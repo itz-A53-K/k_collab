@@ -258,7 +258,6 @@ class Consumer(AsyncWebsocketConsumer):
 
 
 
-
     
     @database_sync_to_async
     def messageCreate_DB(self, data):
