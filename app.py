@@ -41,7 +41,8 @@ class KCollabApp:
 
         self.chatOrder = []
         self.chatData = {}
-        self.taskStack = []
+        self.taskData ={}
+        self.teamData = {}
         
 
         # self.isMsgUI_init = False
@@ -142,12 +143,18 @@ class KCollabApp:
 
             if msg_type == 'chat_notification':
                 self.handle_chat_notification(data)
+
             elif msg_type == 'user_task_notification':
-                self.handle_user_task_notification(data)
+                task_data = data.get('task_data')
+                self._updateTaskStack(task_data)
+
             elif msg_type == 'team_task_notification':
                 self.handle_team_task_notification(data)
+
             elif msg_type == 'newTeam_notification':
-                self.handle_team_notification(data)
+                team_data = data.get('team_data')
+                self._updateTeamStack(team_data)
+
             elif msg_type == 'task_create_confirmation':
                 print(data)
             elif msg_type == 'team_create_confirmation':
@@ -177,20 +184,12 @@ class KCollabApp:
             # Notify user of new message ; like show a notification icon on respective chat and populateChat where latast msg chat is in top
             pass
 
-    def handle_user_task_notification(self, data): 
-        """Handle task notifications."""
-        print(data)
-        pass
 
     def handle_team_task_notification(self, data):
         """Handle task notifications."""
         print(data)
         pass
 
-    def handle_team_notification(self, data):
-        """Handle task notifications."""
-        print(data)
-        pass
 
 
 # WS create events
@@ -801,7 +800,8 @@ class KCollabApp:
             "variablePrefix": "team",
             "api":{
                 "endpoint": "teams/",
-                "callback": "populateTeams",
+                # "callback": "populateTeams",
+                "callback": "_updateTeamStack",
             },
             "defaultMsg": "Click on a team to see details.",
         }
@@ -818,7 +818,8 @@ class KCollabApp:
             "api":{
                 "endpoint": "tasks/",
                 "filter": "to do",
-                "callback": "populateTasks",
+                # "callback": "populateTasks",
+                "callback": "_updateTaskStack",
             },
             "defaultMsg": "Click on a task to view details.",
         }
@@ -1220,63 +1221,69 @@ class KCollabApp:
 
         canvas, canvasFrame = self.createScrollableCanvas(teamDetailFrame, self.bgs["bg_pri"])
 
-        for task in taskData:
-            taskBG = self.bgs["bg1_mid"]
+        if taskData:
+            # clear canvasFrame
+            for widget in canvasFrame.winfo_children():
+                widget.destroy()
 
-            taskFrame = tk.Frame(canvasFrame, bg= taskBG, padx=10, pady=10, bd=1, relief="solid", width=350)
-            taskFrame.pack(anchor="e", expand=True, pady=8)
+            for task in taskData:
+                taskBG = self.bgs["bg1_mid"]
 
-            f1 = tk.Frame(taskFrame, bg=taskBG, pady=5)
-            f1.pack(anchor="w", fill="x")
+                taskFrame = tk.Frame(canvasFrame, bg= taskBG, padx=10, pady=10, bd=1, relief="solid", width=350)
+                taskFrame.pack(anchor="e", expand=True, pady=8)
 
-            tk.Label(f1, text = 'Title: ', bg = taskBG, font = ('Arial', 12, 'bold')).pack(side=tk.LEFT, anchor="nw")
-            tk.Label(f1, text = task.get('title').capitalize(), bg = taskBG, font = ('Arial', 12)).pack(side=tk.LEFT)
+                f1 = tk.Frame(taskFrame, bg=taskBG, pady=5)
+                f1.pack(anchor="w", fill="x")
 
-
-            f2 = tk.Frame(taskFrame, bg=taskBG, pady=3)
-            f2.pack(anchor="w", fill="x")
-
-            tk.Label(f2, text='Description:', bg=taskBG, font=('Arial', 12, 'bold')).pack(side=tk.LEFT, anchor="nw")
-            tk.Label(f2, text=task.get('description').capitalize(), bg=taskBG, font=('Arial', 12), justify="left", wraplength= taskFrame.winfo_reqwidth() / 0.7).pack(side=tk.LEFT)
+                tk.Label(f1, text = 'Title: ', bg = taskBG, font = ('Arial', 12, 'bold')).pack(side=tk.LEFT, anchor="nw")
+                tk.Label(f1, text = task.get('title').capitalize(), bg = taskBG, font = ('Arial', 12)).pack(side=tk.LEFT)
 
 
-            f3 = tk.Frame(taskFrame, bg= taskBG, pady=3)
-            f3.pack(anchor="w", fill="x")
+                f2 = tk.Frame(taskFrame, bg=taskBG, pady=3)
+                f2.pack(anchor="w", fill="x")
 
-            tk.Label(f3, text = 'Deadline: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT, anchor="nw")
-            tk.Label(f3, text = task.get('deadline'), bg = taskBG, font = ('Arial', 12), pady=5).pack(side=tk.LEFT)
-
-
-            f4 = tk.Frame(taskFrame, bg= taskBG, pady=3)
-            f4.pack(anchor="w", fill="x")
-
-            tk.Label(f4, text = 'Status: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT, anchor="nw")
-            tk.Label(f4, text = task.get('status').upper(), bg = taskBG, font = ('Arial', 12), pady=5).pack(side=tk.LEFT)
-            
-
-            fr5= tk.Frame(taskFrame, bg=taskBG, pady=3)
-            fr5.pack(anchor="w", fill="x")
-
-            tk.Label(fr5, text = 'No of SubTask: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT, anchor="nw")
-            tk.Label(fr5, text = task.get('subtaskCount'), bg = taskBG, font = ('Arial', 12), pady=5).pack(side=tk.LEFT)
+                tk.Label(f2, text='Description:', bg=taskBG, font=('Arial', 12, 'bold')).pack(side=tk.LEFT, anchor="nw")
+                tk.Label(f2, text=task.get('description').capitalize(), bg=taskBG, font=('Arial', 12), justify="left", wraplength= taskFrame.winfo_reqwidth() / 0.7).pack(side=tk.LEFT)
 
 
-            fr6= tk.Frame(taskFrame, bg=taskBG, pady=3)
-            fr6.pack(anchor="w", fill="x")
+                f3 = tk.Frame(taskFrame, bg= taskBG, pady=3)
+                f3.pack(anchor="w", fill="x")
 
-            tk.Label(fr6, text = 'Progress: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT)
-            ttk.Progressbar(
-                fr6, 
-                maximum=100, 
-                mode="determinate",
-                value=task.get('progress', 00), 
-                length=taskFrame.winfo_reqwidth() / 0.95
-            ).pack(side=tk.LEFT, pady=5, padx=5)
-            tk.Label(fr6, text=f"{task.get('progress', 00)}%", bg=taskBG, fg=self.bgs['bg5'], font=('Arial', 11, 'bold')).pack(side=tk.LEFT, pady=5)
+                tk.Label(f3, text = 'Deadline: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT, anchor="nw")
+                tk.Label(f3, text = task.get('deadline'), bg = taskBG, font = ('Arial', 12), pady=5).pack(side=tk.LEFT)
 
-        canvas.after(100, lambda: canvas.yview_moveto(1))
-            
 
+                f4 = tk.Frame(taskFrame, bg= taskBG, pady=3)
+                f4.pack(anchor="w", fill="x")
+
+                tk.Label(f4, text = 'Status: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT, anchor="nw")
+                tk.Label(f4, text = task.get('status').upper(), bg = taskBG, font = ('Arial', 12), pady=5).pack(side=tk.LEFT)
+                
+
+                fr5= tk.Frame(taskFrame, bg=taskBG, pady=3)
+                fr5.pack(anchor="w", fill="x")
+
+                tk.Label(fr5, text = 'No of SubTask: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT, anchor="nw")
+                tk.Label(fr5, text = task.get('subtaskCount'), bg = taskBG, font = ('Arial', 12), pady=5).pack(side=tk.LEFT)
+
+
+                fr6= tk.Frame(taskFrame, bg=taskBG, pady=3)
+                fr6.pack(anchor="w", fill="x")
+
+                tk.Label(fr6, text = 'Progress: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT)
+                ttk.Progressbar(
+                    fr6, 
+                    maximum=100, 
+                    mode="determinate",
+                    value=task.get('progress', 00), 
+                    length=taskFrame.winfo_reqwidth() / 0.95
+                ).pack(side=tk.LEFT, pady=5, padx=5)
+                tk.Label(fr6, text=f"{task.get('progress', 00)}%", bg=taskBG, fg=self.bgs['bg5'], font=('Arial', 11, 'bold')).pack(side=tk.LEFT, pady=5)
+
+            canvas.after(100, lambda: canvas.yview_moveto(1))
+                
+        else:
+            tk.Label(canvasFrame, text="No tasks available", bg=canvasFrame.cget('bg'), font=('Arial', 12), pady=10).pack(anchor="center")
 
 
 
@@ -1384,18 +1391,19 @@ class KCollabApp:
 
             self.applyBinding_recursively(chatFrame, bindings)          
             
-    def populateTasks(self, tasks):  
+    def populateTasks(self):  
         panelBG = self.bgs["bg1_light"]
         canvasFrame = getattr(self,"task_canvasFrame")
 
         for widget in canvasFrame.winfo_children():
             widget.destroy()
         
-        if len(tasks) == 0:
+        if len(self.taskData) == 0:
             tk.Label(canvasFrame, text="No Tasks Available.", bg=panelBG, font=('Arial', 13)).pack(anchor="center", pady=10)
             return
         
-        for task in tasks:
+        for task in self.taskData:
+            print(type(task))
             task_id = task['id']
             deadline = task.get('deadline')
             
@@ -1430,18 +1438,18 @@ class KCollabApp:
 
             self.applyBinding_recursively(taskFrame, bindings)
     
-    def populateTeams(self, teams): 
+    def populateTeams(self): 
         panelBG = self.bgs["bg1_light"]
         canvasFrame = getattr(self,"team_canvasFrame")
 
         for widget in canvasFrame.winfo_children():
             widget.destroy()
 
-        if len(teams) == 0:
+        if len(self.teamData) == 0:
             tk.Label(canvasFrame, text="You are not a team member yet.", bg=panelBG, font=('Arial', 13)).pack(anchor="center", pady=10)
             return
         
-        for team in teams:
+        for team in self.teamData:
             team_id = team['id']
             teamFrame = tk.Frame(canvasFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
             teamFrame.pack(fill="x")
@@ -1778,6 +1786,21 @@ class KCollabApp:
             btn.config(command= lambda b=btn: self.initAddTaskModal(b))
             btn.pack(side=tk.RIGHT, anchor=tk.W, ipadx= 6, ipady = 6)
             self.createTooltip(btn, "New Task")
+            
+        elif titleTxt.lower() in ["team", "teams"] and self.user_isAdmin == True:
+            btn = tk.Button(
+                fr,
+                image= self.icons.get("newTeam"),
+                bg=self.bgs["bg4"],
+                activebackground=self.bgs['bg1_mid2'],
+                bd=0,
+                pady=4,
+                cursor="hand2",
+            )
+
+            btn.pack(side=tk.RIGHT, anchor=tk.W, ipadx= 6, ipady = 6)
+            btn.config(command= lambda b=btn: self.initAddTeamModal(b))
+            self.createTooltip(btn, "New Team")
 
         elif titleTxt.lower() in ["chat", "chats"]:
             btn = tk.Button(
@@ -1794,20 +1817,6 @@ class KCollabApp:
             btn.config(command= lambda b=btn: self.initContactModal(b))
             self.createTooltip(btn, "New Chat")
 
-        elif titleTxt.lower() in ["team", "teams"]:
-            btn = tk.Button(
-                fr,
-                image= self.icons.get("newTeam"),
-                bg=self.bgs["bg4"],
-                activebackground=self.bgs['bg1_mid2'],
-                bd=0,
-                pady=4,
-                cursor="hand2",
-            )
-
-            btn.pack(side=tk.RIGHT, anchor=tk.W, ipadx= 6, ipady = 6)
-            btn.config(command= lambda b=btn: self.initAddTeamModal(b))
-            self.createTooltip(btn, "New Team")
 
         filterBtns = []
         if content.get("filters"):
@@ -1937,6 +1946,31 @@ class KCollabApp:
         
         # Repopulate chat list
         self.populateChat()
+
+    
+    
+    def _updateTaskStack(self, task_data):
+        if isinstance(task_data, list):
+            self.taskData =[]
+            for task in task_data:
+                self.taskData.append(task)
+        else:
+            # Single chat update
+            self.taskData.insert(0, task_data)
+
+        self.populateTasks()
+
+    def _updateTeamStack(self, team_data):
+        if isinstance(team_data, list):
+            self.teamData =[]
+            for team in team_data:
+                self.teamData.append(team)
+        else:
+            # Single chat update
+            self.teamData.insert(0, team_data)
+
+        self.populateTeams()
+
 
 
     def _update_message_label_wraplength(self, event = None):
