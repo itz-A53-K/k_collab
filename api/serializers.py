@@ -68,18 +68,18 @@ class teamSerializer(serializers.ModelSerializer):
 
 class task_subTask_detailSerializer(serializers.ModelSerializer):
     is_subtask = serializers.SerializerMethodField()
-    task_id = serializers.SerializerMethodField()
+    parent_task_id = serializers.SerializerMethodField()
     subtaskCount = serializers.SerializerMethodField()
     progress = serializers.SerializerMethodField()
 
     class Meta:
         model = Task  # Start with Task, we will override as needed.
-        fields = ['id', 'title', 'description', 'deadline', 'status', 'is_subtask', 'task_id', 'subtaskCount', 'progress']
+        fields = ['id', 'title', 'description', 'deadline', 'status', 'is_subtask', 'parent_task_id', 'subtaskCount', 'progress']
 
     def get_is_subtask(self, obj):
         return isinstance(obj, SubTask)
 
-    def get_task_id(self, obj):
+    def get_parent_task_id(self, obj):
         if isinstance(obj, SubTask):
             return obj.task.id
         return None
