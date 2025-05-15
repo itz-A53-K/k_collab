@@ -266,6 +266,22 @@ class KCollabApp:
             except Exception as e:
                 print(f"Error creating task: {e}")
 
+    
+    def createBroadcast(self, data):
+        if data :
+            try:
+                dataToSend = {
+                    'type': "broadcast",
+                    "data": data,
+                    "user_id": (self.user_id),
+                }
+                asyncio.run(self.ws.send(json.dumps(dataToSend))) # Send message via WebSocket
+            
+            except Exception as e:
+                print(f"Error creating broadcast: {e}")
+
+
+
 
 # initialization events
     def initMainUI(self):
@@ -717,7 +733,7 @@ class KCollabApp:
         def select_image(button):
             file_path = filedialog.askopenfilename(title="Select Image", filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp")])
             if file_path:
-                button.config(text=self.truncate_chars(file_path, 30, placeholder="....", returnEnd = True))                
+                button.config(text= os.path.basename(file_path))                
                 button.filePath=file_path
 
         def toggle_selection(user_id, frame):
@@ -752,17 +768,181 @@ class KCollabApp:
                 closeModal() 
 
 
+    def initBroadcastModal(self):
+        def update_char_counter(*args):
+            """Update character counter for message input"""
+            current_length = len(msgInput.get("1.0", "end-1c"))
+            max_length = 500
+            color = "#fff"
+
+            if current_length > max_length:
+                color = "red"
+
+            charCounter.config(text=f"{current_length}/{max_length}" , fg = color)
+
+        bgColor = self.bgs["bg4"]
+
+        formFrame = tk.Frame(self.content, bg=bgColor, padx=30, pady=20)
+        formFrame.place(relx=0.5, rely=0.5, anchor="center")
+
+        def closeModal():
+            formFrame.destroy()
+            # addTeamBtn.config(state="normal")
+            
+
+        headerFrame = tk.Frame(formFrame, bg=bgColor)
+        headerFrame.pack(fill="x", pady=(0, 20))
+
+        tk.Label(headerFrame, text="Create Broadcast", font=('Arial', 16, 'bold'), bg=bgColor, fg="#fff").pack(side="left", pady=5)
+
+        closeBtn = tk.Button(headerFrame, text="✕", font=('Arial', 12, 'bold'), bg="red", fg="#fff", bd=0, padx=8, pady=4)
+        closeBtn.pack(side="right")
+        closeTooltip= self.createTooltip(closeBtn, "Close")
+        closeBtn.config(command= lambda: [closeTooltip.place_forget(), closeModal()])
+
+
+        inputStyle = {"font": ('Arial', 12), "width": 40, "bg": "#fff", "bd": 0, "relief": "groove"}
+        labelStyle = {"font": ('Arial', 13), "bg": bgColor, "fg": "#fff", "anchor": "w" }
+
+        tk.Label(formFrame, text="Title*", **labelStyle).pack(anchor="w")
+        titleInput = tk.Entry(formFrame, **inputStyle)
+        titleInput.pack(pady=(5, 15), ipadx=5, ipady=5)
+
+        tk.Label(formFrame, text="Message", **labelStyle).pack(anchor="w")
+        msgInput = tk.Text(formFrame, height = 3, **inputStyle)
+        msgInput.pack(pady=(5, 15), ipadx=5, ipady=5)
+        charCounter = tk.Label(formFrame, text="0/500", font=('Arial', 12), bg=bgColor, fg="#fff")
+        charCounter.pack(anchor="e")
+
+        msgInput.bind("<KeyPress>", update_char_counter)
+        msgInput.bind("<KeyRelease>", update_char_counter)
+    
+
+        tk.Label(formFrame, text="Document", **labelStyle).pack(anchor="w")
+        fileInput = tk.Button(formFrame, text="Select File", command=lambda: select_file(fileInput), **inputStyle)
+        fileInput.pack(pady=(5, 15))
+        fileInput.filePath = None
+        fileInput.fileExt = None
+
+        submitBtn = tk.Button(
+            formFrame, 
+            text="Create", 
+            font=('Arial', 13),
+            bg=self.bgs["bg5"], 
+            fg="white", 
+            pady=10, 
+            bd=0, 
+            width=25,
+            command=lambda: validateForm()
+        )
+        submitBtn.pack(pady=20)
+
+
+
+        def select_file(button):
+
+            file_path = filedialog.askopenfilename(
+                title="Select File ",
+                filetypes=[("All Files", "*.jpg *.jpeg *.png *.pdf")]
+            )
+            if file_path:
+                file_name = os.path.basename(file_path)
+                file_ext = os.path.splitext(file_name)[1].lower()
+
+                button.config(text=file_name)
+                button.filePath = file_path
+                button.fileExt = file_ext
+
+
+        def validateForm():
+            if not titleInput.get():
+                messagebox.showerror("Error", "Title is required")
+            elif not msgInput.get("1.0", tk.END).strip() and not fileInput.filePath:
+                messagebox.showerror("Error", "Please enter message or select a file")
+            elif len(msgInput.get("1.0", "end-1c")) > 500:
+                messagebox.showerror("Error", "Message is too long")
+            else:
+                file_data = None
+                if fileInput.filePath:
+                    with open(fileInput.filePath, 'rb') as f:
+                        file_base64 = base64.b64encode(f.read()).decode('utf-8')
+
+                    file_data = {
+                        "file_base64": file_base64,
+                        "file_ext": fileInput.fileExt
+                    }
+
+                self.createBroadcast({
+                    'title': titleInput.get(),
+                    'msg': msgInput.get("1.0", tk.END).strip(),
+                    'file': file_data 
+                })
+                closeModal()
+
+   
+
+
 #UI create events
 
     def createDashboardUI(self):
         """Create Dashboard UI."""
-        bgPri = self.bgs["bg_pri"]    
+        data = {}
+        resp = requests.get(
+            f"{self.apiURL}dashboard/", 
+            headers={"Authorization": f"Bearer {self.authToken}"}
+        )
+        
+        if resp.status_code == 200:
+            data = resp.json()
+
+        bgPri = self.bgs["bg_pri"] 
+        bgSec = self.bgs["bg1_light"]   
         frame = tk.Frame(self.content, bg= bgPri)
 
-        mainFrame = tk.Frame(frame, bg= "green", padx=10, pady=5)
-        mainFrame.pack(side=tk.LEFT, fill=tk.Y)
+        mainFrame = tk.Frame(frame, padx=10, pady=5, bg=bgPri)
+        mainFrame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         tk.Label(mainFrame, text= "Dashboard", bg= bgPri, font=("Arial", 16, "bold")).pack(anchor=tk.W)
+
+        fr1 = tk.Frame(mainFrame, bg=bgSec, padx=10, pady=15)
+        fr1.pack(fill=tk.X, expand=True, padx=20, pady=20)
+
+        tk.Label(fr1, text= "Task Details", font=("Arial", 16, "bold"), bg=bgSec).pack(anchor=tk.W, pady=(0, 15))
+
+        fr1Box1 = tk.Frame(fr1, bd = 1, height= 100, padx=20, pady=10, relief="solid" )
+        fr1Box1.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
+        fr1Box1.pack_propagate(False)
+        tk.Label(fr1Box1, text= "Total Tasks", font=("Arial", 12)).pack(anchor=tk.W, pady=5)
+        tk.Label(fr1Box1, text= data.get("total_tasks", 0), font=("Arial", 20, "bold")).pack(anchor=tk.W)
+
+        fr1Box2 = tk.Frame(fr1, bd = 1, height= 100, padx=20, pady=10, relief="solid" )
+        fr1Box2.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
+        fr1Box2.pack_propagate(False)
+        tk.Label(fr1Box2, text= "In Progress Tasks", font=("Arial", 12)).pack(anchor=tk.W, pady=5)
+        tk.Label(fr1Box2, text= data.get("total_inProgress", 0), font=("Arial", 20, "bold")).pack(anchor=tk.W)
+
+        fr1Box3 = tk.Frame(fr1, bd = 1, height= 100, padx=20, pady=10, relief="solid" )
+        fr1Box3.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
+        fr1Box3.pack_propagate(False)
+        tk.Label(fr1Box3, text= "Completed Tasks", font=("Arial", 12)).pack(anchor=tk.W, pady=5)
+        tk.Label(fr1Box3, text= data.get("total_completed", 0), font=("Arial", 20, "bold")).pack(anchor=tk.W)
+
+
+        fr2 = tk.Frame(mainFrame, bg=bgSec, padx=10, pady=15)
+        fr2.pack(fill=tk.X, expand=True, padx=20, pady=20)
+
+        tk.Label(fr2, text="Performance Metrics", font=("Arial", 16, "bold"), bg=bgSec).pack(anchor=tk.W, pady=(0, 15))
+
+        fr2Box1 = tk.Frame(fr2, bd = 1, height= 110, padx=20, pady=10, relief="solid" )
+        fr2Box1.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
+        fr2Box1.pack_propagate(False)
+        tk.Label(fr2Box1, text= "Task Completion Rate", font=("Arial", 12)).pack(anchor=tk.W, pady=5)
+
+        progress = ttk.Progressbar(fr2Box1, length=250, mode='determinate', value=data.get("completeRate", 0))
+        progress.pack(pady=5, anchor = "w")
+        tk.Label(fr2Box1, text=f"{data.get("completeRate", 0)}%", font=("Arial", 12, "bold")).pack(anchor="w")
+
+
 
 
         notificationFrame = tk.Frame(frame, bg="red", padx=10, pady=5, width=400)
@@ -779,6 +959,9 @@ class KCollabApp:
             mainFrame.configure(width=frame_width)
 
         self.content.bind("<Configure>", lambda e:updateMainFrameWidth())
+
+
+
         return frame
 
 
@@ -824,7 +1007,6 @@ class KCollabApp:
             "api":{
                 "endpoint": "tasks/",
                 "filter": "to do",
-                # "callback": "populateTasks",
                 "callback": "_updateTaskStack",
             },
             "defaultMsg": "Click on a task to view details.",
@@ -993,12 +1175,13 @@ class KCollabApp:
     
 
     def handleNavlinkClick(self, section):
-        if section.lower() != "logout":
+        if section.lower() not in ["logout", "broadcast"]:
             self.clear_content()
 
             for icon_btn, text, inactive_icon, active_icon in self.nav_icons:
                 if section.lower() == text.lower():
-                    icon_btn.config(image=self.icons.get(active_icon), bg=self.bgs["bg5"])
+                    btn = icon_btn
+                    btn.config(image=self.icons.get(active_icon), bg=self.bgs["bg5"])
                 else:
                     icon_btn.config(image=self.icons.get(inactive_icon), bg=self.bgs["bg1"])
 
@@ -1010,12 +1193,14 @@ class KCollabApp:
 
         if section.lower() == "dashboard":
             self.initDashboardUI()
-        elif section.lower() == "chats":
-            self.initChatsUI()
         elif section.lower() == "tasks":
             self.initTasksUI()
         elif section.lower() == "teams":
             self.initTeamsUI()
+        elif section.lower() == "chats":
+            self.initChatsUI()
+        elif section.lower() == "broadcast":
+            self.initBroadcastModal()
         elif section.lower() == "logout":
             self.handleLogoutClick()
         
@@ -1124,7 +1309,7 @@ class KCollabApp:
                 # widget.pack_forget()
 
             taskDetailFrame.config(padx= 10, pady= 15)
-            tk.Label(taskDetailFrame, text=f"Task #{task_id}", bg= bgc, font=('Arial', 16, 'bold italic underline')).pack(anchor="w", pady=10)
+            tk.Label(taskDetailFrame, text=f"Task ", bg= bgc, font=('Arial', 16, 'bold italic underline')).pack(anchor="w", pady=10)
 
             dataFrame = tk.Frame(taskDetailFrame, bg=bgc)
             dataFrame.pack(fill="x", side=tk.TOP, pady=15, ipadx=5)
@@ -1366,7 +1551,7 @@ class KCollabApp:
             taskFrame = tk.Frame(canvasFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
             taskFrame.pack(fill="x")
             
-            tk.Label(taskFrame, text=f"Task #{task_id}", bg=panelBG, font=('Arial', 10, "bold italic underline")).pack(anchor="w")
+            tk.Label(taskFrame, text=f"Task", bg=panelBG, font=('Arial', 10, "bold italic underline")).pack(anchor="w")
             tk.Label(taskFrame, text=task.get('title'), bg=panelBG, font=('Arial', 12)).pack(anchor="w")
             tk.Label(taskFrame, text=f"Deadline: {deadline}", bg=panelBG, fg = color, font=('Arial', 9)).pack(anchor="w")
 
@@ -1421,7 +1606,6 @@ class KCollabApp:
             }
 
             self.applyBinding_recursively(teamFrame, bindings)          
-
 
     def populateTeamTasks(self):
         bgColor = self.bgs["bg_pri"]
@@ -1915,7 +2099,7 @@ class KCollabApp:
                 if btn.cget('bg') == self.bgs["bg5"]:
                     filter_val = btn.cget("text")
             
-            self._updateL1_leftPanel("tasks/", "populateTasks", filterBtns, filter_val.lower())
+            self._updateL1_leftPanel("tasks/", "_updateTaskStack", filterBtns, filter_val.lower())
         else:
             print("Failed to update task status")
           
@@ -1939,6 +2123,7 @@ class KCollabApp:
             if callable(callback_func):
                 self.asyncGetRequest(endpoint, callback_func, params)
         
+
 
     def _updateChatStack(self, chat_data):
         if isinstance(chat_data, list):
@@ -1964,8 +2149,6 @@ class KCollabApp:
         
         # Repopulate chat list
         self.populateChat()
-
-    
     
     def _updateTaskStack(self, task_data):
         if isinstance(task_data, list):
@@ -1989,7 +2172,6 @@ class KCollabApp:
 
         self.populateTeams()
 
-
     def _updateTeamTaskStack(self, team_task_data):
         if isinstance(team_task_data, list):
             self.teamTaskData =[]
@@ -2003,7 +2185,8 @@ class KCollabApp:
 
 
 
-    def _update_message_label_wraplength(self, event = None):
+
+    def _update_message_label_wraplength(self, event = None): 
         """Update the wraplength of the message labels in the chat."""
         if hasattr(self, "msgCanvasFrame"):
             width = getattr(self, 'chat_rightPanelFrame').winfo_width() * 0.7

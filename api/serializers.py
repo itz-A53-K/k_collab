@@ -149,3 +149,7 @@ class messageSerializer(serializers.ModelSerializer):
         return data
 
     
+class broadcastSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Broadcast
+        fields = ['id', 'title', 'message', 'created_at']

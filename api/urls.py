@@ -16,4 +16,6 @@ urlpatterns = [
 
     path('tasks/', views.task_subTaskList.as_view(), name='task_list'),
     path('tasks/<int:task_id>/', views.task_subTaskViewUpdate.as_view(), name='task_view_update'),
+
+    path('dashboard/', views.dashboardContent.as_view(), name='dashboard_content'),
 ]

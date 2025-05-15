@@ -13,7 +13,32 @@ from rest_framework.authtoken.models import Token
 from .models import *
 from .serializers import *
 from itertools import chain
-import json
+
+
+class dashboardContent(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        # no of tasks and subtasks
+        tasks = user.tasks.all()
+        subtasks = user.subtasks.all()
+        total_tasks = tasks.count() + subtasks.count()
+        total_inProgress = tasks.filter(status="in progress").count() + subtasks.filter(status="in progress").count()
+        total_completed = tasks.filter(status="completed").count() + subtasks.filter(status="completed").count()
+
+        completeRate = (total_completed / total_tasks) * 100 if total_tasks > 0 else 0
+
+        notifications = broadcastSerializer(Broadcast.objects.all().order_by('-created_at')[20], many=True).data
+
+        return Response({
+            "total_tasks": total_tasks,
+            "total_inProgress": total_inProgress,
+            "total_completed": total_completed,
+            "completeRate": completeRate,
+            "notifications": notifications
+        })
 
 
 
@@ -70,8 +95,12 @@ class task_subTaskList(generics.ListAPIView):
         user = self.request.user
         filter = self.request.query_params.get('filter', "to do") or self.request.data.get('filter', "to do")
 
-        tasks = list(user.tasks.filter(status = filter))
-        subtasks = list(user.subtasks.filter(status = filter))
+        if filter == "all":
+            tasks = list(user.tasks.all())
+            subtasks = list(user.subtasks.all())
+        else:
+            tasks = list(user.tasks.filter(status = filter))
+            subtasks = list(user.subtasks.filter(status = filter))
         combined_list = list(chain(tasks, subtasks))
 
         combined_list.sort(key=lambda item: item.deadline)
