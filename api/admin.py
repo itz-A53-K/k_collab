@@ -23,5 +23,6 @@ class taskAdmin(admin.ModelAdmin):
 admin.site.register(Task, taskAdmin)
 admin.site.register(Team)
 admin.site.register(Chat)
+admin.site.register(Broadcast)
 
 

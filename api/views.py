@@ -30,14 +30,14 @@ class dashboardContent(APIView):
 
         completeRate = (total_completed / total_tasks) * 100 if total_tasks > 0 else 0
 
-        notifications = broadcastSerializer(Broadcast.objects.all().order_by('-created_at')[20], many=True).data
+        notices = broadcastSerializer(Broadcast.objects.all().order_by('-created_at')[:20], many=True).data
 
         return Response({
             "total_tasks": total_tasks,
             "total_inProgress": total_inProgress,
             "total_completed": total_completed,
             "completeRate": completeRate,
-            "notifications": notifications
+            "notices": notices
         })
 
 
@@ -211,6 +211,8 @@ class userDetail(APIView):
             'name': user.name,
             'email': user.email,
             'isAdmin': user.isAdmin,
+            'phone': user.phone,
+            'designation': user.designation,
             'dp': user.dp.url if user.dp else None
         }
 

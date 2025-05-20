@@ -39,6 +39,8 @@ class KCollabApp:
         self.openedChatID = None
         self.openedTeamID = None
         self.current_receiver_id = None
+        self.profileFrame = None
+        self.profileHidden = True
 
         self.chatOrder = []
         self.chatData = []
@@ -315,16 +317,14 @@ class KCollabApp:
                 ("Teams", ("teams_gray", "teams_red")),
                 ("Chats", ("chats_gray", "chats_red")),
                 ("Create User", ("groupDP", "groupDP")),
-                ("Broadcast", ("groupDP", "groupDP")),
-                ("Logout", ("logout_gray", "logout_red"))
+                ("Broadcast", ("groupDP", "groupDP"))
             ]
         else:
             navLinks = [
                 ("Dashboard", ("dashboard_gray", "dashboard_red")), 
                 ("Tasks", ("tasks_gray", "tasks_red")),
                 ("Teams", ("teams_gray", "teams_red")),
-                ("Chats", ("chats_gray", "chats_red")),
-                ("Logout", ("", "logout_red"))
+                ("Chats", ("chats_gray", "chats_red"))
             ]
 
         navLink_style = {
@@ -366,10 +366,7 @@ class KCollabApp:
                 icon_btn.config(image = icon, bg= self.bgs["bg5"])
                 text_btn.config(image = icon, bg= self.bgs["bg5"])
             else:
-                if text == "Logout":
-                    icon = self.icons.get(active_icon)
-                else:
-                    icon = self.icons.get(inactive_icon)
+                icon = self.icons.get(inactive_icon)
                 icon_btn.config(image = icon)
                 text_btn.config(image = icon)
 
@@ -383,22 +380,16 @@ class KCollabApp:
             self.navbar,
             image=profilePic,
             anchor=tk.CENTER,
+            command=lambda: self.handleProfileClick(),
         )
         profile_icon_btn.pack(pady=10, padx=5, side="bottom")
-        # self.nav_icons.append((profile_icon_btn, "Profile", inactive_icon, active_icon))
+        self.createTooltip(profile_icon_btn, "Profile", inTop = True)
 
         # Content area
         self.content = tk.Frame(self.mainFrame, bg= self.bgs["bg_pri"])
         self.content.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        # Initialize sections
-        self.dashboard_frame = self.createDashboardUI()
-        self.chats_frame = self.createChatsUI()
-        self.tasks_frame = self.createTasksUI()
-        self.teams_frame = self.createTeamsUI()
-
-        # Show default section
-        self.initDashboardUI()
+        self.createDashboardUI()
 
     def initLoginUI(self):
         self.loginFrame = tk.Frame(self.mainFrame, bg= self.bgs["bg_pri"], padx=30, pady=30, bd=3, relief="flat")
@@ -430,19 +421,6 @@ class KCollabApp:
 
         self.loginBtn = tk.Button(self.loginFrame, text="LOGIN", font=('Arial', 13), bg=self.bgs["bg1"], fg="white", pady=10, bd=0, width= 25, command=self.handleLoginClick)
         self.loginBtn.pack(pady=20)
-
-
-    def initDashboardUI(self):
-        self.dashboard_frame.pack(fill=tk.BOTH, expand=True)
-    
-    def initChatsUI(self):
-        self.chats_frame.pack(fill=tk.BOTH, expand=True)
-
-    def initTasksUI(self):
-        self.tasks_frame.pack(fill=tk.BOTH, expand=True)
-
-    def initTeamsUI(self):
-        self.teams_frame.pack(fill=tk.BOTH, expand=True)
 
 
     def initAddTaskModal(self, addTaskBtn):
@@ -902,10 +880,10 @@ class KCollabApp:
         mainFrame = tk.Frame(frame, padx=10, pady=5, bg=bgPri)
         mainFrame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        tk.Label(mainFrame, text= "Dashboard", bg= bgPri, font=("Arial", 16, "bold")).pack(anchor=tk.W)
+        tk.Label(mainFrame, text= "Dashboard", bg= bgPri, font=("Arial", 17, "bold")).pack(anchor=tk.W)
 
         fr1 = tk.Frame(mainFrame, bg=bgSec, padx=10, pady=15)
-        fr1.pack(fill=tk.X, expand=True, padx=20, pady=20)
+        fr1.pack(fill=tk.X, expand=True, padx=5, pady=20)
 
         tk.Label(fr1, text= "Task Details", font=("Arial", 16, "bold"), bg=bgSec).pack(anchor=tk.W, pady=(0, 15))
 
@@ -929,7 +907,7 @@ class KCollabApp:
 
 
         fr2 = tk.Frame(mainFrame, bg=bgSec, padx=10, pady=15)
-        fr2.pack(fill=tk.X, expand=True, padx=20, pady=20)
+        fr2.pack(fill=tk.X, expand=True, padx=5, pady=20)
 
         tk.Label(fr2, text="Performance Metrics", font=("Arial", 16, "bold"), bg=bgSec).pack(anchor=tk.W, pady=(0, 15))
 
@@ -945,12 +923,25 @@ class KCollabApp:
 
 
 
-        notificationFrame = tk.Frame(frame, bg="red", padx=10, pady=5, width=400)
-        notificationFrame.pack(side=tk.RIGHT, fill=tk.Y)
+        # noticeBg= self.bgs["bg4_mid"]
+        noticeBg= self.bgs["bg1_mid2"]
+        noticeFrame = tk.Frame(frame, bg=noticeBg, padx=10, pady=5, width=400)
+        noticeFrame.pack(side=tk.RIGHT, fill=tk.Y)
+        noticeFrame.pack_propagate(False)
 
-        tk.Label(notificationFrame, text= "Notifications", bg=bgPri, font=("Arial", 16, "bold")).pack(anchor=tk.W)
+        tk.Label(noticeFrame, text= "Notices", bg=noticeBg, font=("Arial", 17, "bold")).pack(anchor=tk.W, pady=10)
 
-        canvas, canvasFrame =self.createScrollableCanvas(notificationFrame, "gray")
+        canvas, canvasFrame =self.createScrollableCanvas(noticeFrame, noticeBg)
+
+        if data.get("notices") is None:
+            tk.Label(canvasFrame, text="No notice available.", bg=noticeBg, font=("Arial", 12)).pack(anchor="center", pady=15)
+        else:
+            for notice in data.get("notices", []):
+                frBG= self.bgs['gray_2']
+                fr = tk.Frame(canvasFrame, bg=frBG, padx=5, pady=5, bd=1, relief="solid")
+                fr.pack(fill=tk.X, expand=True, pady=(0, 5))
+                tk.Label(fr, text=notice['title'], bg=frBG, font=("Arial", 12), wraplength=350).pack(anchor=tk.W)
+                tk.Label(fr, text=self.truncate_chars(notice['message'], 100), bg=frBG, font=("Arial", 10), justify="left", wraplength=350).pack(anchor=tk.W)
         
 
 
@@ -960,9 +951,8 @@ class KCollabApp:
 
         self.content.bind("<Configure>", lambda e:updateMainFrameWidth())
 
-
-
-        return frame
+       
+        frame.pack(fill=tk.BOTH, expand=True)
 
 
     def createChatsUI(self):
@@ -979,7 +969,7 @@ class KCollabApp:
         }
         frame = tk.Frame(self.content, bg= self.bgs["bg_pri"])
         self.layout_1(frame, json.dumps(content))
-        return frame
+        frame.pack(fill=tk.BOTH, expand=True)
 
 
     def createTeamsUI(self):
@@ -989,14 +979,13 @@ class KCollabApp:
             "variablePrefix": "team",
             "api":{
                 "endpoint": "teams/",
-                # "callback": "populateTeams",
                 "callback": "_updateTeamStack",
             },
             "defaultMsg": "Click on a team to see details.",
         }
         frame = tk.Frame(self.content, bg= self.bgs["bg_pri"])
         self.layout_1(frame, json.dumps(content))
-        return frame
+        frame.pack(fill=tk.BOTH, expand=True)
 
 
     def createTasksUI(self):
@@ -1013,7 +1002,7 @@ class KCollabApp:
         }
         frame = tk.Frame(self.content, bg= self.bgs["bg_pri"])
         self.layout_1(frame, json.dumps(content))
-        return frame
+        frame.pack(fill=tk.BOTH, expand=True)
 
 
     def createScrollableCanvas(self, parentFrame, bgColor):
@@ -1175,7 +1164,8 @@ class KCollabApp:
     
 
     def handleNavlinkClick(self, section):
-        if section.lower() not in ["logout", "broadcast"]:
+        self.profileHidden = True
+        if section.lower() not in ["broadcast"]:
             self.clear_content()
 
             for icon_btn, text, inactive_icon, active_icon in self.nav_icons:
@@ -1192,20 +1182,76 @@ class KCollabApp:
                     text_btn.config(image=self.icons.get(inactive_icon), bg=self.bgs["bg1"])        
 
         if section.lower() == "dashboard":
-            self.initDashboardUI()
+            self.createDashboardUI()
+
         elif section.lower() == "tasks":
-            self.initTasksUI()
+            self.createTasksUI()
+
         elif section.lower() == "teams":
-            self.initTeamsUI()
+            self.createTeamsUI()
+
         elif section.lower() == "chats":
-            self.initChatsUI()
+            self.createChatsUI()
+
         elif section.lower() == "broadcast":
             self.initBroadcastModal()
-        elif section.lower() == "logout":
-            self.handleLogoutClick()
         
         self.active_navLink= section
         
+
+    def handleProfileClick(self):
+
+        if not self.profileHidden:
+            self.profileFrame.destroy() 
+            self.profileHidden = True
+            return
+
+        bgColor = self.bgs["bg1_mid2"]
+        style1 = { "bg": bgColor, "fg": "#222", "font": ('Arial', 9) }
+        style2 = { "bg": bgColor, "fg": "#000", "font": ('Arial', 13) }
+
+        frame = tk.Frame(self.content, bg=bgColor, padx=20, pady=10, width = 300)
+        frame.place(x=0, y=self.content.winfo_height(), anchor='sw', relx=0, width=300, height=450)
+        frame.pack_propagate(False)
+
+        profilePic = self.load_and_resize_img("userDP", self.user_dp, (125, 125))
+        frame.dp = profilePic
+
+        tk.Label(frame, image=profilePic, bg=bgColor, height=125, width=125).pack(side="top", anchor="w", pady=(10, 5))
+
+        tk.Label(frame, text=self.user_name, font=('Arial', 14, 'bold'), bg=bgColor, fg="#000" ).pack(anchor="w", pady=(7, 5))
+
+        
+        fr1= tk.Frame(frame, bg=bgColor)
+        fr1.pack(anchor="w", pady=(10, 0))
+
+        tk.Label(fr1, text="Designation", **style1).pack(anchor="w")
+        tk.Label(fr1, text=self.user_designation, **style2).pack(anchor="w")
+
+
+        fr2= tk.Frame(frame, bg=bgColor)
+        fr2.pack(anchor="w", pady=(10, 0))
+
+        tk.Label(fr2, text="Email", **style1).pack(anchor="w")
+        tk.Label(fr2, text=self.user_email, **style2).pack(anchor="w")
+
+        if self.user_phone is not None:
+            fr3= tk.Frame(frame, bg=bgColor)
+            fr3.pack(anchor="w", pady=(10, 0))
+
+            tk.Label(fr3, text="Phone No.", **style1).pack(anchor="w")
+            tk.Label(fr3, text=self.user_phone, **style2).pack(anchor="w")
+
+        tk.Button(
+            frame, text="Logout",
+            bg="#f22525", fg="#fff",
+            font=('Arial', 11, 'bold'), 
+            command=self.handleLogoutClick,
+            bd=0, cursor="hand2"
+        ).pack(anchor="w", pady=(15, 10), ipadx=15, ipady=5)      
+
+        self.profileFrame = frame
+        self.profileHidden = False
 
     def handleChatClick(self, data, newChat = False):
         """Handle chat click event.
@@ -1685,6 +1731,7 @@ class KCollabApp:
     def clear_content(self):
         for widget in self.content.winfo_children():
             widget.pack_forget()
+            widget.destroy()
 
 
     def load_token(self):
@@ -1916,12 +1963,13 @@ class KCollabApp:
                 self.applyBinding_recursively(child, bindings)
 
 
-    def createTooltip(self, widget, text, bgColor = "#333"):
+    def createTooltip(self, widget, text, bgColor = "#333", inTop = False):
         """Creates a tooltip for a widget.
         Args:
             widget (tk.Widget): The widget to which the tooltip will be applied.
             text (str): The text to display in the tooltip.
             bgColor (str, optional): The background color of the tooltip. Defaults to "#333".
+            inTop (bool, optional): Whether to position the tooltip above the widget. Defaults to False.
         """
             
         tooltip = tk.Label(
@@ -1938,7 +1986,11 @@ class KCollabApp:
 
         def show_tooltip(event, label=tooltip, button=widget):
             x = button.winfo_rootx() - self.root.winfo_rootx() + button.winfo_width()
-            y = button.winfo_rooty() - self.root.winfo_rooty() + button.winfo_height() + 3
+
+            if inTop:
+                y = button.winfo_rooty() - self.root.winfo_rooty() - label.winfo_height() - 3
+            else:
+                y = button.winfo_rooty() - self.root.winfo_rooty() + button.winfo_height() + 3
             label.place(x=x, y=y, anchor="n")
 
         def hide_tooltip(event, label=tooltip):
