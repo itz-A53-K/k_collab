@@ -52,7 +52,7 @@ class KCollabApp:
         # self.isMsgUI_init = False
         self.baseURL = "http://127.0.0.1:8000"
         self.apiURL = f"{self.baseURL}/api/"
-        self.ws_url = "ws://127.0.0.1:8000/ws/"
+        self.ws_url = "wss://127.0.0.1:8000/ws/"
 
 
         self.mainFrame = tk.Frame(self.root, bg= self.bgs["gray_1"])
