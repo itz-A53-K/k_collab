@@ -38,7 +38,6 @@ class Consumer(AsyncWebsocketConsumer):
         pass
 
 
-
     async def receive(self, text_data):
         try:
             data = json.loads(text_data)

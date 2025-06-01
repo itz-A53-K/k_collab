@@ -52,7 +52,7 @@ class KCollabApp:
         # self.isMsgUI_init = False
         self.baseURL = "http://127.0.0.1:8000"
         self.apiURL = f"{self.baseURL}/api/"
-        self.ws_url = "wss://127.0.0.1:8000/ws/"
+        self.ws_url = "ws://127.0.0.1:8000/ws/"
 
 
         self.mainFrame = tk.Frame(self.root, bg= self.bgs["gray_1"])
@@ -771,7 +771,7 @@ class KCollabApp:
         headerFrame = tk.Frame(formFrame, bg=bgColor)
         headerFrame.pack(fill="x", pady=(0, 20))
 
-        tk.Label(headerFrame, text="Create Broadcast", font=('Arial', 16, 'bold'), bg=bgColor, fg="#fff").pack(side="left", pady=5)
+        tk.Label(headerFrame, text="Create Notice", font=('Arial', 16, 'bold'), bg=bgColor, fg="#fff").pack(side="left", pady=5)
 
         closeBtn = tk.Button(headerFrame, text="✕", font=('Arial', 12, 'bold'), bg="red", fg="#fff", bd=0, padx=8, pady=4)
         closeBtn.pack(side="right")
