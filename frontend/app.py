@@ -940,7 +940,7 @@ class KCollabApp:
                 frBG= self.bgs['gray_2']
                 fr = tk.Frame(canvasFrame, bg=frBG, padx=5, pady=5, bd=1, relief="solid")
                 fr.pack(fill=tk.X, expand=True, pady=(0, 5))
-                tk.Label(fr, text=notice['title'], bg=frBG, font=("Arial", 12), wraplength=350).pack(anchor=tk.W)
+                tk.Label(fr, text=notice['title'], bg=frBG, font=("Arial", 11, 'bold'), wraplength=350).pack(anchor=tk.W)
                 tk.Label(fr, text=self.truncate_chars(notice['message'], 100), bg=frBG, font=("Arial", 10), justify="left", wraplength=350).pack(anchor=tk.W)
         
 
