@@ -38,7 +38,6 @@ class Consumer(AsyncWebsocketConsumer):
         pass
 
 
-
     async def receive(self, text_data):
         try:
             data = json.loads(text_data)
@@ -232,6 +231,7 @@ class Consumer(AsyncWebsocketConsumer):
                     'task_data': task_data,
                 }))
 
+
     async def WS_teamNotification(self, event):
         current_user_id = str(self.scope['user'].id)
 
@@ -370,8 +370,8 @@ class Consumer(AsyncWebsocketConsumer):
                 assigned_team = team,
             )
 
-            new_taskData = serializers.task_subTaskSerializer(task).data
-            #add user, team to new_taskData
+            new_taskData = serializers.task_subTask_detailSerializer(task).data
+            #add user/ team to new_taskData
             if user:
                 new_taskData['assigned_user_id'] = user_id
             if team:

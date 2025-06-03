@@ -130,3 +130,8 @@ class Message(models.Model):
         return f"Message from {self.sender.email}"
 
 
+class Broadcast(models.Model):
+    title = models.CharField(max_length=100)
+    message = models.TextField(max_length=500)
+    file = models.FileField(upload_to='broadcast_files/', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)

@@ -37,12 +37,16 @@ class KCollabApp:
 
         self.openedTaskID = None
         self.openedChatID = None
+        self.openedTeamID = None
         self.current_receiver_id = None
+        self.profileFrame = None
+        self.profileHidden = True
 
         self.chatOrder = []
-        self.chatData = {}
-        self.taskData ={}
-        self.teamData = {}
+        self.chatData = []
+        self.taskData =[]
+        self.teamData = []
+        self.teamTaskData = []
         
 
         # self.isMsgUI_init = False
@@ -187,8 +191,12 @@ class KCollabApp:
 
     def handle_team_task_notification(self, data):
         """Handle task notifications."""
-        print(data)
-        pass
+        task_data = data.get('task_data')
+
+        if self.active_navLink == 'Teams' and task_data.get('assigned_team_id') == self.openedTeamID:
+            self._updateTeamTaskStack(task_data)
+        else:
+            print("no match")
 
 
 
@@ -260,6 +268,22 @@ class KCollabApp:
             except Exception as e:
                 print(f"Error creating task: {e}")
 
+    
+    def createBroadcast(self, data):
+        if data :
+            try:
+                dataToSend = {
+                    'type': "broadcast",
+                    "data": data,
+                    "user_id": (self.user_id),
+                }
+                asyncio.run(self.ws.send(json.dumps(dataToSend))) # Send message via WebSocket
+            
+            except Exception as e:
+                print(f"Error creating broadcast: {e}")
+
+
+
 
 # initialization events
     def initMainUI(self):
@@ -293,16 +317,14 @@ class KCollabApp:
                 ("Teams", ("teams_gray", "teams_red")),
                 ("Chats", ("chats_gray", "chats_red")),
                 ("Create User", ("groupDP", "groupDP")),
-                ("Broadcast", ("groupDP", "groupDP")),
-                ("Logout", ("logout_gray", "logout_red"))
+                ("Broadcast", ("groupDP", "groupDP"))
             ]
         else:
             navLinks = [
                 ("Dashboard", ("dashboard_gray", "dashboard_red")), 
                 ("Tasks", ("tasks_gray", "tasks_red")),
                 ("Teams", ("teams_gray", "teams_red")),
-                ("Chats", ("chats_gray", "chats_red")),
-                ("Logout", ("", "logout_red"))
+                ("Chats", ("chats_gray", "chats_red"))
             ]
 
         navLink_style = {
@@ -344,10 +366,7 @@ class KCollabApp:
                 icon_btn.config(image = icon, bg= self.bgs["bg5"])
                 text_btn.config(image = icon, bg= self.bgs["bg5"])
             else:
-                if text == "Logout":
-                    icon = self.icons.get(active_icon)
-                else:
-                    icon = self.icons.get(inactive_icon)
+                icon = self.icons.get(inactive_icon)
                 icon_btn.config(image = icon)
                 text_btn.config(image = icon)
 
@@ -361,22 +380,16 @@ class KCollabApp:
             self.navbar,
             image=profilePic,
             anchor=tk.CENTER,
+            command=lambda: self.handleProfileClick(),
         )
         profile_icon_btn.pack(pady=10, padx=5, side="bottom")
-        # self.nav_icons.append((profile_icon_btn, "Profile", inactive_icon, active_icon))
+        self.createTooltip(profile_icon_btn, "Profile", inTop = True)
 
         # Content area
         self.content = tk.Frame(self.mainFrame, bg= self.bgs["bg_pri"])
         self.content.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        # Initialize sections
-        self.dashboard_frame = self.createDashboardUI()
-        self.chats_frame = self.createChatsUI()
-        self.tasks_frame = self.createTasksUI()
-        self.teams_frame = self.createTeamsUI()
-
-        # Show default section
-        self.initDashboardUI()
+        self.createDashboardUI()
 
     def initLoginUI(self):
         self.loginFrame = tk.Frame(self.mainFrame, bg= self.bgs["bg_pri"], padx=30, pady=30, bd=3, relief="flat")
@@ -408,19 +421,6 @@ class KCollabApp:
 
         self.loginBtn = tk.Button(self.loginFrame, text="LOGIN", font=('Arial', 13), bg=self.bgs["bg1"], fg="white", pady=10, bd=0, width= 25, command=self.handleLoginClick)
         self.loginBtn.pack(pady=20)
-
-
-    def initDashboardUI(self):
-        self.dashboard_frame.pack(fill=tk.BOTH, expand=True)
-    
-    def initChatsUI(self):
-        self.chats_frame.pack(fill=tk.BOTH, expand=True)
-
-    def initTasksUI(self):
-        self.tasks_frame.pack(fill=tk.BOTH, expand=True)
-
-    def initTeamsUI(self):
-        self.teams_frame.pack(fill=tk.BOTH, expand=True)
 
 
     def initAddTaskModal(self, addTaskBtn):
@@ -711,7 +711,7 @@ class KCollabApp:
         def select_image(button):
             file_path = filedialog.askopenfilename(title="Select Image", filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp")])
             if file_path:
-                button.config(text=self.truncate_chars(file_path, 30, placeholder="....", returnEnd = True))                
+                button.config(text= os.path.basename(file_path))                
                 button.filePath=file_path
 
         def toggle_selection(user_id, frame):
@@ -746,25 +746,202 @@ class KCollabApp:
                 closeModal() 
 
 
+    def initBroadcastModal(self):
+        def update_char_counter(*args):
+            """Update character counter for message input"""
+            current_length = len(msgInput.get("1.0", "end-1c"))
+            max_length = 500
+            color = "#fff"
+
+            if current_length > max_length:
+                color = "red"
+
+            charCounter.config(text=f"{current_length}/{max_length}" , fg = color)
+
+        bgColor = self.bgs["bg4"]
+
+        formFrame = tk.Frame(self.content, bg=bgColor, padx=30, pady=20)
+        formFrame.place(relx=0.5, rely=0.5, anchor="center")
+
+        def closeModal():
+            formFrame.destroy()
+            # addTeamBtn.config(state="normal")
+            
+
+        headerFrame = tk.Frame(formFrame, bg=bgColor)
+        headerFrame.pack(fill="x", pady=(0, 20))
+
+        tk.Label(headerFrame, text="Create Notice", font=('Arial', 16, 'bold'), bg=bgColor, fg="#fff").pack(side="left", pady=5)
+
+        closeBtn = tk.Button(headerFrame, text="✕", font=('Arial', 12, 'bold'), bg="red", fg="#fff", bd=0, padx=8, pady=4)
+        closeBtn.pack(side="right")
+        closeTooltip= self.createTooltip(closeBtn, "Close")
+        closeBtn.config(command= lambda: [closeTooltip.place_forget(), closeModal()])
+
+
+        inputStyle = {"font": ('Arial', 12), "width": 40, "bg": "#fff", "bd": 0, "relief": "groove"}
+        labelStyle = {"font": ('Arial', 13), "bg": bgColor, "fg": "#fff", "anchor": "w" }
+
+        tk.Label(formFrame, text="Title*", **labelStyle).pack(anchor="w")
+        titleInput = tk.Entry(formFrame, **inputStyle)
+        titleInput.pack(pady=(5, 15), ipadx=5, ipady=5)
+
+        tk.Label(formFrame, text="Message", **labelStyle).pack(anchor="w")
+        msgInput = tk.Text(formFrame, height = 3, **inputStyle)
+        msgInput.pack(pady=(5, 15), ipadx=5, ipady=5)
+        charCounter = tk.Label(formFrame, text="0/500", font=('Arial', 12), bg=bgColor, fg="#fff")
+        charCounter.pack(anchor="e")
+
+        msgInput.bind("<KeyPress>", update_char_counter)
+        msgInput.bind("<KeyRelease>", update_char_counter)
+    
+
+        tk.Label(formFrame, text="Document", **labelStyle).pack(anchor="w")
+        fileInput = tk.Button(formFrame, text="Select File", command=lambda: select_file(fileInput), **inputStyle)
+        fileInput.pack(pady=(5, 15))
+        fileInput.filePath = None
+        fileInput.fileExt = None
+
+        submitBtn = tk.Button(
+            formFrame, 
+            text="Create", 
+            font=('Arial', 13),
+            bg=self.bgs["bg5"], 
+            fg="white", 
+            pady=10, 
+            bd=0, 
+            width=25,
+            command=lambda: validateForm()
+        )
+        submitBtn.pack(pady=20)
+
+
+
+        def select_file(button):
+
+            file_path = filedialog.askopenfilename(
+                title="Select File ",
+                filetypes=[("All Files", "*.jpg *.jpeg *.png *.pdf")]
+            )
+            if file_path:
+                file_name = os.path.basename(file_path)
+                file_ext = os.path.splitext(file_name)[1].lower()
+
+                button.config(text=file_name)
+                button.filePath = file_path
+                button.fileExt = file_ext
+
+
+        def validateForm():
+            if not titleInput.get():
+                messagebox.showerror("Error", "Title is required")
+            elif not msgInput.get("1.0", tk.END).strip() and not fileInput.filePath:
+                messagebox.showerror("Error", "Please enter message or select a file")
+            elif len(msgInput.get("1.0", "end-1c")) > 500:
+                messagebox.showerror("Error", "Message is too long")
+            else:
+                file_data = None
+                if fileInput.filePath:
+                    with open(fileInput.filePath, 'rb') as f:
+                        file_base64 = base64.b64encode(f.read()).decode('utf-8')
+
+                    file_data = {
+                        "file_base64": file_base64,
+                        "file_ext": fileInput.fileExt
+                    }
+
+                self.createBroadcast({
+                    'title': titleInput.get(),
+                    'msg': msgInput.get("1.0", tk.END).strip(),
+                    'file': file_data 
+                })
+                closeModal()
+
+   
+
+
 #UI create events
 
     def createDashboardUI(self):
         """Create Dashboard UI."""
-        bgPri = self.bgs["bg_pri"]    
+        data = {}
+        resp = requests.get(
+            f"{self.apiURL}dashboard/", 
+            headers={"Authorization": f"Bearer {self.authToken}"}
+        )
+        
+        if resp.status_code == 200:
+            data = resp.json()
+
+        bgPri = self.bgs["bg_pri"] 
+        bgSec = self.bgs["bg1_light"]   
         frame = tk.Frame(self.content, bg= bgPri)
 
-        mainFrame = tk.Frame(frame, bg= "green", padx=10, pady=5)
-        mainFrame.pack(side=tk.LEFT, fill=tk.Y)
+        mainFrame = tk.Frame(frame, padx=10, pady=5, bg=bgPri)
+        mainFrame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        tk.Label(mainFrame, text= "Dashboard", bg= bgPri, font=("Arial", 16, "bold")).pack(anchor=tk.W)
+        tk.Label(mainFrame, text= "Dashboard", bg= bgPri, font=("Arial", 17, "bold")).pack(anchor=tk.W)
+
+        fr1 = tk.Frame(mainFrame, bg=bgSec, padx=10, pady=15)
+        fr1.pack(fill=tk.X, expand=True, padx=5, pady=20)
+
+        tk.Label(fr1, text= "Task Details", font=("Arial", 16, "bold"), bg=bgSec).pack(anchor=tk.W, pady=(0, 15))
+
+        fr1Box1 = tk.Frame(fr1, bd = 1, height= 100, padx=20, pady=10, relief="solid" )
+        fr1Box1.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
+        fr1Box1.pack_propagate(False)
+        tk.Label(fr1Box1, text= "Total Tasks", font=("Arial", 12)).pack(anchor=tk.W, pady=5)
+        tk.Label(fr1Box1, text= data.get("total_tasks", 0), font=("Arial", 20, "bold")).pack(anchor=tk.W)
+
+        fr1Box2 = tk.Frame(fr1, bd = 1, height= 100, padx=20, pady=10, relief="solid" )
+        fr1Box2.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
+        fr1Box2.pack_propagate(False)
+        tk.Label(fr1Box2, text= "In Progress Tasks", font=("Arial", 12)).pack(anchor=tk.W, pady=5)
+        tk.Label(fr1Box2, text= data.get("total_inProgress", 0), font=("Arial", 20, "bold")).pack(anchor=tk.W)
+
+        fr1Box3 = tk.Frame(fr1, bd = 1, height= 100, padx=20, pady=10, relief="solid" )
+        fr1Box3.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
+        fr1Box3.pack_propagate(False)
+        tk.Label(fr1Box3, text= "Completed Tasks", font=("Arial", 12)).pack(anchor=tk.W, pady=5)
+        tk.Label(fr1Box3, text= data.get("total_completed", 0), font=("Arial", 20, "bold")).pack(anchor=tk.W)
 
 
-        notificationFrame = tk.Frame(frame, bg="red", padx=10, pady=5, width=400)
-        notificationFrame.pack(side=tk.RIGHT, fill=tk.Y)
+        fr2 = tk.Frame(mainFrame, bg=bgSec, padx=10, pady=15)
+        fr2.pack(fill=tk.X, expand=True, padx=5, pady=20)
 
-        tk.Label(notificationFrame, text= "Notifications", bg=bgPri, font=("Arial", 16, "bold")).pack(anchor=tk.W)
+        tk.Label(fr2, text="Performance Metrics", font=("Arial", 16, "bold"), bg=bgSec).pack(anchor=tk.W, pady=(0, 15))
 
-        canvas, canvasFrame =self.createScrollableCanvas(notificationFrame, "gray")
+        fr2Box1 = tk.Frame(fr2, bd = 1, height= 110, padx=20, pady=10, relief="solid" )
+        fr2Box1.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
+        fr2Box1.pack_propagate(False)
+        tk.Label(fr2Box1, text= "Task Completion Rate", font=("Arial", 12)).pack(anchor=tk.W, pady=5)
+
+        progress = ttk.Progressbar(fr2Box1, length=250, mode='determinate', value=data.get("completeRate", 0))
+        progress.pack(pady=5, anchor = "w")
+        tk.Label(fr2Box1, text=f"{data.get("completeRate", 0)}%", font=("Arial", 12, "bold")).pack(anchor="w")
+
+
+
+
+        # noticeBg= self.bgs["bg4_mid"]
+        noticeBg= self.bgs["bg1_mid2"]
+        noticeFrame = tk.Frame(frame, bg=noticeBg, padx=10, pady=5, width=400)
+        noticeFrame.pack(side=tk.RIGHT, fill=tk.Y)
+        noticeFrame.pack_propagate(False)
+
+        tk.Label(noticeFrame, text= "Notices", bg=noticeBg, font=("Arial", 17, "bold")).pack(anchor=tk.W, pady=10)
+
+        canvas, canvasFrame =self.createScrollableCanvas(noticeFrame, noticeBg)
+
+        if data.get("notices") is None:
+            tk.Label(canvasFrame, text="No notice available.", bg=noticeBg, font=("Arial", 12)).pack(anchor="center", pady=15)
+        else:
+            for notice in data.get("notices", []):
+                frBG= self.bgs['gray_2']
+                fr = tk.Frame(canvasFrame, bg=frBG, padx=5, pady=5, bd=1, relief="solid")
+                fr.pack(fill=tk.X, expand=True, pady=(0, 5))
+                tk.Label(fr, text=notice['title'], bg=frBG, font=("Arial", 11, 'bold'), wraplength=350).pack(anchor=tk.W)
+                tk.Label(fr, text=self.truncate_chars(notice['message'], 100), bg=frBG, font=("Arial", 10), justify="left", wraplength=350).pack(anchor=tk.W)
         
 
 
@@ -773,7 +950,9 @@ class KCollabApp:
             mainFrame.configure(width=frame_width)
 
         self.content.bind("<Configure>", lambda e:updateMainFrameWidth())
-        return frame
+
+       
+        frame.pack(fill=tk.BOTH, expand=True)
 
 
     def createChatsUI(self):
@@ -790,7 +969,7 @@ class KCollabApp:
         }
         frame = tk.Frame(self.content, bg= self.bgs["bg_pri"])
         self.layout_1(frame, json.dumps(content))
-        return frame
+        frame.pack(fill=tk.BOTH, expand=True)
 
 
     def createTeamsUI(self):
@@ -800,14 +979,13 @@ class KCollabApp:
             "variablePrefix": "team",
             "api":{
                 "endpoint": "teams/",
-                # "callback": "populateTeams",
                 "callback": "_updateTeamStack",
             },
             "defaultMsg": "Click on a team to see details.",
         }
         frame = tk.Frame(self.content, bg= self.bgs["bg_pri"])
         self.layout_1(frame, json.dumps(content))
-        return frame
+        frame.pack(fill=tk.BOTH, expand=True)
 
 
     def createTasksUI(self):
@@ -818,14 +996,13 @@ class KCollabApp:
             "api":{
                 "endpoint": "tasks/",
                 "filter": "to do",
-                # "callback": "populateTasks",
                 "callback": "_updateTaskStack",
             },
             "defaultMsg": "Click on a task to view details.",
         }
         frame = tk.Frame(self.content, bg= self.bgs["bg_pri"])
         self.layout_1(frame, json.dumps(content))
-        return frame
+        frame.pack(fill=tk.BOTH, expand=True)
 
 
     def createScrollableCanvas(self, parentFrame, bgColor):
@@ -987,12 +1164,14 @@ class KCollabApp:
     
 
     def handleNavlinkClick(self, section):
-        if section.lower() != "logout":
+        self.profileHidden = True
+        if section.lower() not in ["broadcast"]:
             self.clear_content()
 
             for icon_btn, text, inactive_icon, active_icon in self.nav_icons:
                 if section.lower() == text.lower():
-                    icon_btn.config(image=self.icons.get(active_icon), bg=self.bgs["bg5"])
+                    btn = icon_btn
+                    btn.config(image=self.icons.get(active_icon), bg=self.bgs["bg5"])
                 else:
                     icon_btn.config(image=self.icons.get(inactive_icon), bg=self.bgs["bg1"])
 
@@ -1003,18 +1182,76 @@ class KCollabApp:
                     text_btn.config(image=self.icons.get(inactive_icon), bg=self.bgs["bg1"])        
 
         if section.lower() == "dashboard":
-            self.initDashboardUI()
-        elif section.lower() == "chats":
-            self.initChatsUI()
+            self.createDashboardUI()
+
         elif section.lower() == "tasks":
-            self.initTasksUI()
+            self.createTasksUI()
+
         elif section.lower() == "teams":
-            self.initTeamsUI()
-        elif section.lower() == "logout":
-            self.handleLogoutClick()
+            self.createTeamsUI()
+
+        elif section.lower() == "chats":
+            self.createChatsUI()
+
+        elif section.lower() == "broadcast":
+            self.initBroadcastModal()
         
         self.active_navLink= section
         
+
+    def handleProfileClick(self):
+
+        if not self.profileHidden:
+            self.profileFrame.destroy() 
+            self.profileHidden = True
+            return
+
+        bgColor = self.bgs["bg1_mid2"]
+        style1 = { "bg": bgColor, "fg": "#222", "font": ('Arial', 9) }
+        style2 = { "bg": bgColor, "fg": "#000", "font": ('Arial', 13) }
+
+        frame = tk.Frame(self.content, bg=bgColor, padx=20, pady=10, width = 300)
+        frame.place(x=0, y=self.content.winfo_height(), anchor='sw', relx=0, width=300, height=450)
+        frame.pack_propagate(False)
+
+        profilePic = self.load_and_resize_img("userDP", self.user_dp, (125, 125))
+        frame.dp = profilePic
+
+        tk.Label(frame, image=profilePic, bg=bgColor, height=125, width=125).pack(side="top", anchor="w", pady=(10, 5))
+
+        tk.Label(frame, text=self.user_name, font=('Arial', 14, 'bold'), bg=bgColor, fg="#000" ).pack(anchor="w", pady=(7, 5))
+
+        
+        fr1= tk.Frame(frame, bg=bgColor)
+        fr1.pack(anchor="w", pady=(10, 0))
+
+        tk.Label(fr1, text="Designation", **style1).pack(anchor="w")
+        tk.Label(fr1, text=self.user_designation, **style2).pack(anchor="w")
+
+
+        fr2= tk.Frame(frame, bg=bgColor)
+        fr2.pack(anchor="w", pady=(10, 0))
+
+        tk.Label(fr2, text="Email", **style1).pack(anchor="w")
+        tk.Label(fr2, text=self.user_email, **style2).pack(anchor="w")
+
+        if self.user_phone is not None:
+            fr3= tk.Frame(frame, bg=bgColor)
+            fr3.pack(anchor="w", pady=(10, 0))
+
+            tk.Label(fr3, text="Phone No.", **style1).pack(anchor="w")
+            tk.Label(fr3, text=self.user_phone, **style2).pack(anchor="w")
+
+        tk.Button(
+            frame, text="Logout",
+            bg="#f22525", fg="#fff",
+            font=('Arial', 11, 'bold'), 
+            command=self.handleLogoutClick,
+            bd=0, cursor="hand2"
+        ).pack(anchor="w", pady=(15, 10), ipadx=15, ipady=5)      
+
+        self.profileFrame = frame
+        self.profileHidden = False
 
     def handleChatClick(self, data, newChat = False):
         """Handle chat click event.
@@ -1118,7 +1355,7 @@ class KCollabApp:
                 # widget.pack_forget()
 
             taskDetailFrame.config(padx= 10, pady= 15)
-            tk.Label(taskDetailFrame, text=f"Task #{task_id}", bg= bgc, font=('Arial', 16, 'bold italic underline')).pack(anchor="w", pady=10)
+            tk.Label(taskDetailFrame, text=f"Task ", bg= bgc, font=('Arial', 16, 'bold italic underline')).pack(anchor="w", pady=10)
 
             dataFrame = tk.Frame(taskDetailFrame, bg=bgc)
             dataFrame.pack(fill="x", side=tk.TOP, pady=15, ipadx=5)
@@ -1185,6 +1422,7 @@ class KCollabApp:
         teamData = data.get('team')
         taskData = data.get('tasks')
         lastMsg = data.get('last_message')
+        self.openedTeamID = teamData.get('id')
         bg1_light = self.bgs["bg1_light"]
 
         for widget in teamDetailFrame.winfo_children():
@@ -1221,73 +1459,11 @@ class KCollabApp:
 
         canvas, canvasFrame = self.createScrollableCanvas(teamDetailFrame, self.bgs["bg_pri"])
 
-        if taskData:
-            # clear canvasFrame
-            for widget in canvasFrame.winfo_children():
-                widget.destroy()
-
-            for task in taskData:
-                taskBG = self.bgs["bg1_mid"]
-
-                taskFrame = tk.Frame(canvasFrame, bg= taskBG, padx=10, pady=10, bd=1, relief="solid", width=350)
-                taskFrame.pack(anchor="e", expand=True, pady=8)
-
-                f1 = tk.Frame(taskFrame, bg=taskBG, pady=5)
-                f1.pack(anchor="w", fill="x")
-
-                tk.Label(f1, text = 'Title: ', bg = taskBG, font = ('Arial', 12, 'bold')).pack(side=tk.LEFT, anchor="nw")
-                tk.Label(f1, text = task.get('title').capitalize(), bg = taskBG, font = ('Arial', 12)).pack(side=tk.LEFT)
+        setattr(self, 'team_task_canvasFrame', canvasFrame)
+        setattr(self, 'team_task_canvas', canvas)
 
 
-                f2 = tk.Frame(taskFrame, bg=taskBG, pady=3)
-                f2.pack(anchor="w", fill="x")
-
-                tk.Label(f2, text='Description:', bg=taskBG, font=('Arial', 12, 'bold')).pack(side=tk.LEFT, anchor="nw")
-                tk.Label(f2, text=task.get('description').capitalize(), bg=taskBG, font=('Arial', 12), justify="left", wraplength= taskFrame.winfo_reqwidth() / 0.7).pack(side=tk.LEFT)
-
-
-                f3 = tk.Frame(taskFrame, bg= taskBG, pady=3)
-                f3.pack(anchor="w", fill="x")
-
-                tk.Label(f3, text = 'Deadline: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT, anchor="nw")
-                tk.Label(f3, text = task.get('deadline'), bg = taskBG, font = ('Arial', 12), pady=5).pack(side=tk.LEFT)
-
-
-                f4 = tk.Frame(taskFrame, bg= taskBG, pady=3)
-                f4.pack(anchor="w", fill="x")
-
-                tk.Label(f4, text = 'Status: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT, anchor="nw")
-                tk.Label(f4, text = task.get('status').upper(), bg = taskBG, font = ('Arial', 12), pady=5).pack(side=tk.LEFT)
-                
-
-                fr5= tk.Frame(taskFrame, bg=taskBG, pady=3)
-                fr5.pack(anchor="w", fill="x")
-
-                tk.Label(fr5, text = 'No of SubTask: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT, anchor="nw")
-                tk.Label(fr5, text = task.get('subtaskCount'), bg = taskBG, font = ('Arial', 12), pady=5).pack(side=tk.LEFT)
-
-
-                fr6= tk.Frame(taskFrame, bg=taskBG, pady=3)
-                fr6.pack(anchor="w", fill="x")
-
-                tk.Label(fr6, text = 'Progress: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT)
-                ttk.Progressbar(
-                    fr6, 
-                    maximum=100, 
-                    mode="determinate",
-                    value=task.get('progress', 00), 
-                    length=taskFrame.winfo_reqwidth() / 0.95
-                ).pack(side=tk.LEFT, pady=5, padx=5)
-                tk.Label(fr6, text=f"{task.get('progress', 00)}%", bg=taskBG, fg=self.bgs['bg5'], font=('Arial', 11, 'bold')).pack(side=tk.LEFT, pady=5)
-
-            canvas.after(100, lambda: canvas.yview_moveto(1))
-                
-        else:
-            tk.Label(canvasFrame, text="No tasks available", bg=canvasFrame.cget('bg'), font=('Arial', 12), pady=10).pack(anchor="center")
-
-
-
-
+        self._updateTeamTaskStack(taskData)
 
         lastMsgFrame = tk.Frame(teamDetailFrame, height=60, padx=5, pady=5, bg= self.bgs["gray_1"])
         lastMsgFrame.pack(fill="x", side=tk.BOTTOM, pady=(5, 0))
@@ -1403,7 +1579,6 @@ class KCollabApp:
             return
         
         for task in self.taskData:
-            print(type(task))
             task_id = task['id']
             deadline = task.get('deadline')
             
@@ -1422,7 +1597,7 @@ class KCollabApp:
             taskFrame = tk.Frame(canvasFrame, bg= panelBG, cursor="hand2", pady=10, padx=10)
             taskFrame.pack(fill="x")
             
-            tk.Label(taskFrame, text=f"Task #{task_id}", bg=panelBG, font=('Arial', 10, "bold italic underline")).pack(anchor="w")
+            tk.Label(taskFrame, text=f"Task", bg=panelBG, font=('Arial', 10, "bold italic underline")).pack(anchor="w")
             tk.Label(taskFrame, text=task.get('title'), bg=panelBG, font=('Arial', 12)).pack(anchor="w")
             tk.Label(taskFrame, text=f"Deadline: {deadline}", bg=panelBG, fg = color, font=('Arial', 9)).pack(anchor="w")
 
@@ -1470,7 +1645,7 @@ class KCollabApp:
             bindings ={
                 '<Enter>': lambda e, frame=teamFrame: self.hov_enter(frame, self.bgs["bg1_mid"]),
                 '<Leave>': lambda e, frame=teamFrame: self.hov_leave(frame, panelBG),
-                '<Button-1>': lambda e, t_id= team.get('id'): self.asyncGetRequest(
+                '<Button-1>': lambda e, t_id= team_id: self.asyncGetRequest(
                                 endpoint = f'teams/{t_id}/',
                                 callback = self.handleTeamClick
                             ),
@@ -1478,11 +1653,85 @@ class KCollabApp:
 
             self.applyBinding_recursively(teamFrame, bindings)          
 
+    def populateTeamTasks(self):
+        bgColor = self.bgs["bg_pri"]
+        canvasFrame = getattr(self, 'team_task_canvasFrame')
+        canvas = getattr(self, 'team_task_canvas')
+
+        for widget in canvasFrame.winfo_children():
+            widget.destroy()
+
+        if len(self.teamTaskData) == 0:
+            tk.Label(canvasFrame, text="No tasks available", bg=bgColor, font=('Arial', 12), pady=10).pack(anchor="center")
+            return
+
+        for task in self.teamTaskData:
+            taskBG = self.bgs["bg1_mid"]
+
+            taskFrame = tk.Frame(canvasFrame, bg= taskBG, padx=10, pady=10, bd=1, relief="solid", width=350)
+            taskFrame.pack(anchor="e", expand=True, pady=8)
+
+            f1 = tk.Frame(taskFrame, bg=taskBG, pady=5)
+            f1.pack(anchor="w", fill="x")
+
+            tk.Label(f1, text = 'Title: ', bg = taskBG, font = ('Arial', 12, 'bold')).pack(side=tk.LEFT, anchor="nw")
+            tk.Label(f1, text = task.get('title').capitalize(), bg = taskBG, font = ('Arial', 12)).pack(side=tk.LEFT)
+
+
+            f2 = tk.Frame(taskFrame, bg=taskBG, pady=3)
+            f2.pack(anchor="w", fill="x")
+
+            tk.Label(f2, text='Description:', bg=taskBG, font=('Arial', 12, 'bold')).pack(side=tk.LEFT, anchor="nw")
+            desc = tk.Label(f2, text=task.get('description').capitalize(), bg=taskBG, font=('Arial', 12), justify="left")
+            desc.pack(side=tk.LEFT)
+
+
+            f3 = tk.Frame(taskFrame, bg= taskBG, pady=3)
+            f3.pack(anchor="w", fill="x")
+
+            tk.Label(f3, text = 'Deadline: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT, anchor="nw")
+            tk.Label(f3, text = task.get('deadline'), bg = taskBG, font = ('Arial', 12), pady=5).pack(side=tk.LEFT)
+
+
+            f4 = tk.Frame(taskFrame, bg= taskBG, pady=3)
+            f4.pack(anchor="w", fill="x")
+
+            tk.Label(f4, text = 'Status: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT, anchor="nw")
+            tk.Label(f4, text = task.get('status').upper(), bg = taskBG, font = ('Arial', 12), pady=5).pack(side=tk.LEFT)
+            
+
+            fr5= tk.Frame(taskFrame, bg=taskBG, pady=3)
+            fr5.pack(anchor="w", fill="x")
+
+            tk.Label(fr5, text = 'No of SubTask: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT, anchor="nw")
+            tk.Label(fr5, text = task.get('subtaskCount'), bg = taskBG, font = ('Arial', 12), pady=5).pack(side=tk.LEFT)
+
+
+            fr6= tk.Frame(taskFrame, bg=taskBG, pady=3)
+            fr6.pack(anchor="w", fill="x")
+
+            tk.Label(fr6, text = 'Progress: ', bg = taskBG, font = ('Arial', 12, 'bold'), pady=5).pack(side=tk.LEFT)
+            ttk.Progressbar(
+                fr6, 
+                maximum=100, 
+                mode="determinate",
+                value=task.get('progress', 00), 
+                length=taskFrame.winfo_reqwidth() / 0.95
+            ).pack(side=tk.LEFT, pady=5, padx=5)
+            tk.Label(fr6, text=f"{task.get('progress', 00)}%", bg=taskBG, fg=self.bgs['bg5'], font=('Arial', 11, 'bold')).pack(side=tk.LEFT, pady=5)
+            
+            taskFrame.after(100, lambda: desc.config(wraplength= taskFrame.winfo_reqwidth() / 0.7))
+
+        canvas.update_idletasks()
+        canvas.yview_moveto(1)
+            
+    
 
 # helper functions
     def clear_content(self):
         for widget in self.content.winfo_children():
             widget.pack_forget()
+            widget.destroy()
 
 
     def load_token(self):
@@ -1578,7 +1827,7 @@ class KCollabApp:
             bg= bubble_frame.cget("bg"), 
             font= ('Arial', 11), 
             padx= 5, 
-            # justify= "left",
+            justify= "left",
             wraplength= getattr(self,"chat_rightPanelFrame").winfo_width()*0.7
         )
         message_label.pack(anchor="w")
@@ -1714,12 +1963,13 @@ class KCollabApp:
                 self.applyBinding_recursively(child, bindings)
 
 
-    def createTooltip(self, widget, text, bgColor = "#333"):
+    def createTooltip(self, widget, text, bgColor = "#333", inTop = False):
         """Creates a tooltip for a widget.
         Args:
             widget (tk.Widget): The widget to which the tooltip will be applied.
             text (str): The text to display in the tooltip.
             bgColor (str, optional): The background color of the tooltip. Defaults to "#333".
+            inTop (bool, optional): Whether to position the tooltip above the widget. Defaults to False.
         """
             
         tooltip = tk.Label(
@@ -1736,7 +1986,11 @@ class KCollabApp:
 
         def show_tooltip(event, label=tooltip, button=widget):
             x = button.winfo_rootx() - self.root.winfo_rootx() + button.winfo_width()
-            y = button.winfo_rooty() - self.root.winfo_rooty() + button.winfo_height() + 3
+
+            if inTop:
+                y = button.winfo_rooty() - self.root.winfo_rooty() - label.winfo_height() - 3
+            else:
+                y = button.winfo_rooty() - self.root.winfo_rooty() + button.winfo_height() + 3
             label.place(x=x, y=y, anchor="n")
 
         def hide_tooltip(event, label=tooltip):
@@ -1897,7 +2151,7 @@ class KCollabApp:
                 if btn.cget('bg') == self.bgs["bg5"]:
                     filter_val = btn.cget("text")
             
-            self._updateL1_leftPanel("tasks/", "populateTasks", filterBtns, filter_val.lower())
+            self._updateL1_leftPanel("tasks/", "_updateTaskStack", filterBtns, filter_val.lower())
         else:
             print("Failed to update task status")
           
@@ -1921,6 +2175,7 @@ class KCollabApp:
             if callable(callback_func):
                 self.asyncGetRequest(endpoint, callback_func, params)
         
+
 
     def _updateChatStack(self, chat_data):
         if isinstance(chat_data, list):
@@ -1946,8 +2201,6 @@ class KCollabApp:
         
         # Repopulate chat list
         self.populateChat()
-
-    
     
     def _updateTaskStack(self, task_data):
         if isinstance(task_data, list):
@@ -1971,9 +2224,21 @@ class KCollabApp:
 
         self.populateTeams()
 
+    def _updateTeamTaskStack(self, team_task_data):
+        if isinstance(team_task_data, list):
+            self.teamTaskData =[]
+            for task in team_task_data:
+                self.teamTaskData.append(task)
+        else:
+            # Single chat update
+            self.teamTaskData.append(team_task_data)
+
+        self.populateTeamTasks()
 
 
-    def _update_message_label_wraplength(self, event = None):
+
+
+    def _update_message_label_wraplength(self, event = None): 
         """Update the wraplength of the message labels in the chat."""
         if hasattr(self, "msgCanvasFrame"):
             width = getattr(self, 'chat_rightPanelFrame').winfo_width() * 0.7

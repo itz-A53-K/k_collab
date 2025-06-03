@@ -11,7 +11,8 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'kcollab.settings')
 django_asgi_app = get_asgi_application()
 
 application = ProtocolTypeRouter({
-    "http": django_asgi_app,
+    "http": django_asgi_app, 
+    "https": django_asgi_app,  # Handle HTTPS requests
     "websocket": AuthMiddlewareStack(
         URLRouter(
             websocket_urlpatterns  # Use it in URLRouter

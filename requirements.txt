@@ -6,6 +6,9 @@ channels
 channels[daphne]
 websockets
 tkcalendar
+# mysqlclient
+
+
 
 
 
